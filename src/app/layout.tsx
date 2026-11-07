@@ -14,6 +14,9 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Șeptică",
+  applicationName: "Șeptică",
+  appleWebApp: { capable: true, title: "Șeptică", statusBarStyle: "default" },
+  other: { "apple-mobile-web-app-capable": "yes" },
   description: "Șeptică multiplayer între prieteni, 2-4 jucători, și pe echipe.",
 };
 
