@@ -17,6 +17,12 @@ export const metadata: Metadata = {
   applicationName: "Șeptică",
   appleWebApp: { capable: true, title: "Șeptică", statusBarStyle: "default" },
   other: { "apple-mobile-web-app-capable": "yes" },
+  // Explicit instead of app/apple-icon.tsx (its link came out as "/apple-icon", without the basePath).
+  // Setting icons drops the file-based favicon link, so it is listed here too.
+  icons: {
+    icon: { url: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/favicon.ico`, sizes: "48x48", type: "image/x-icon" },
+    apple: { url: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icons/180`, sizes: "180x180", type: "image/png" },
+  },
   description: "Șeptică multiplayer între prieteni, 2-4 jucători, și pe echipe.",
 };
 
