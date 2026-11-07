@@ -5,7 +5,7 @@
 ## Accounts and deploy
 - GitHub: personal account **florin2495** only (repo `florin2495/webSepticaGame`, private). Never the work account.
   Local git identity is pinned in `.git/config`.
-- Vercel project is connected by the user manually; production domain https://septica.hailatat.icu.
+- Vercel project is connected by the user manually; served at https://games.hailatat.icu/septica (`basePath`; the hub proxies it to web-septica-game.vercel.app).
   Functions run in `fra1` (Frankfurt, next to the Supabase DB) via `vercel.json`.
 - Feedback (`POST /api/feedback`) writes to `hub_feedback` (owned by florin2495/hailataticu-hub, slug `septica`).
 - Ask the user before pushing (= deploying), unless they explicitly say to deploy.
