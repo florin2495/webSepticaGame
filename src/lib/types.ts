@@ -11,6 +11,8 @@ export interface PublicPlayer {
   team: number | null;
   /** Rounds won in this room. */
   wins: number;
+  /** Ms left to press "Ignoră" on a pending kick (0-10000), null when none. */
+  kickRemainingMs: number | null;
 }
 
 export interface SideView {

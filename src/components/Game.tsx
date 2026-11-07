@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PREF_CONFIRM_PLAY, useBoolPref } from "@/lib/client/prefs";
 import { type Card as CardT, cuts, type Play, rankLabel, rankOf } from "@/lib/septica";
 import type { GameView, PublicPlayer, RoomState, SideView } from "@/lib/types";
+import { KickBadge } from "./KickBadge";
 import { CardBack, PlayingCard } from "./PlayingCard";
 import { Button, Card, ErrorText } from "./ui";
 import { TEAM_NAMES, TEAM_STYLES, useAction } from "./useAction";
@@ -85,6 +86,16 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
             partner={game.teams && byId.get(id)?.team === me.team}
             canSkip={isHost && game.turn === id && room.status === "playing"}
             busy={busy !== null}
+            canKick={isHost}
+            onKick={() => {
+              const target = byId.get(id);
+              if (!target) return;
+              const msg =
+                room.status === "playing"
+                  ? `Scoți jucătorul ${target.nickname} din joc? Are 10 secunde ca să refuze.`
+                  : `Scoți jucătorul ${target.nickname} din cameră?`;
+              if (window.confirm(msg)) void run("kick", { playerId: id });
+            }}
             onSkip={() => {
               if (window.confirm(`Joci în locul lui ${nick(id)}? (cartea cea mai mică, sau lasă mâna)`)) void run("skip");
             }}
@@ -219,6 +230,8 @@ function Seat({
   partner,
   canSkip,
   busy,
+  canKick,
+  onKick,
   onSkip,
 }: {
   player: PublicPlayer | undefined;
@@ -228,6 +241,8 @@ function Seat({
   partner: boolean;
   canSkip: boolean;
   busy: boolean;
+  canKick: boolean;
+  onKick: () => void;
   onSkip: () => void;
 }) {
   const team = player?.team;
@@ -247,12 +262,24 @@ function Seat({
         {isLeader ? "a început" : ""}
         {!partner && !isLeader ? " " : ""}
       </span>
+      <KickBadge remainingMs={player?.kickRemainingMs ?? null} />
       <span className="flex h-8 items-center">
         {Array.from({ length: count }, (_, i) => (
           <CardBack key={i} size="sm" className={`!h-8 !w-6 ${i > 0 ? "-ml-3" : ""}`} />
         ))}
         {count === 0 && <span className="text-xs text-zinc-400">fără cărți</span>}
       </span>
+      {canKick && player && player.kickRemainingMs === null && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onKick}
+          className="min-h-8 rounded-md border border-rose-300 px-2 text-[11px] font-semibold text-rose-600 disabled:opacity-40 dark:border-rose-800 dark:text-rose-400"
+          aria-label={`Scoate pe ${player.nickname}`}
+        >
+          Scoate
+        </button>
+      )}
       {canSkip && (
         <button
           type="button"

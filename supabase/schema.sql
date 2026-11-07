@@ -42,8 +42,11 @@ create table if not exists public.septica_players (
   ready      boolean not null default false,
   team       smallint check (team is null or team in (0, 1)),
   wins       integer not null default 0 check (wins >= 0),
-  joined_at  timestamptz not null default now()
+  joined_at  timestamptz not null default now(),
+  kick_requested_at timestamptz                            -- pending host kick during a game (null = none), see migrations/001
 );
+-- For databases created before migration 001:
+alter table public.septica_players add column if not exists kick_requested_at timestamptz;
 create unique index if not exists septica_players_room_nickname_uq on public.septica_players (room_id, lower(nickname));
 create index if not exists septica_players_room_idx on public.septica_players (room_id);
 

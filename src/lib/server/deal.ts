@@ -20,6 +20,8 @@ export async function startDeal(room: RoomRow, round: number, requireReady: bool
   const order = seatOrder(players, room.host_player_id, room.teams);
   const deal = newDeal(order, roundLeader(order, round), room.teams);
   await saveRoom(room, { status: "playing", round, deal, result: null });
+  const { error } = await db().from(T.players).update({ kick_requested_at: null }).eq("room_id", room.id);
+  if (error) throw error;
   await notifyRoom(room.id, "deal_started");
 }
 

@@ -14,10 +14,12 @@ import {
 } from "@/lib/client/api";
 import { PREF_NICKNAME, useStringPref, writePref } from "@/lib/client/prefs";
 import { realtimeClient } from "@/lib/client/realtime";
+import { KICK_NETWORK_GRACE_MS } from "@/lib/kick";
 import { minutesLabel, NICKNAME_MAX, ROOM_IDLE_MINUTES } from "@/lib/septica";
 import type { RoomState } from "@/lib/types";
 import { FeedbackButton } from "./FeedbackButton";
 import { Game } from "./Game";
+import { KickClockContext, KickModal } from "./KickBadge";
 import { Lobby } from "./Lobby";
 import { SettingsPanel } from "./SettingsPanel";
 import { Button, Card, ErrorText, Field } from "./ui";
@@ -45,6 +47,7 @@ function Loading() {
 
 function useRoomState(code: string, token: string) {
   const [state, setState] = useState<RoomState | null>(null);
+  const [receivedAt, setReceivedAt] = useState(0);
   const [error, setError] = useState("");
   const [missing, setMissing] = useState(false);
   const latest = useRef(0);
@@ -55,6 +58,7 @@ function useRoomState(code: string, token: string) {
       const s = await api<RoomState>(`/api/rooms/${code}/state`, { token });
       if (id !== latest.current) return; // a newer request already answered
       setState(s);
+      setReceivedAt(Date.now());
       setError("");
     } catch (err) {
       if (id !== latest.current) return;
@@ -99,11 +103,20 @@ function useRoomState(code: string, token: string) {
     };
   }, [roomId, refresh]);
 
-  return { state, error, missing, refresh };
+  return { state, receivedAt, error, missing, refresh };
 }
 
 function Room({ code, token }: { code: string; token: string }) {
-  const { state, error, missing, refresh } = useRoomState(code, token);
+  const { state, receivedAt, error, missing, refresh } = useRoomState(code, token);
+
+  // A pending kick is enforced by the server on the first request after its deadline: refresh once then.
+  useEffect(() => {
+    if (!state) return;
+    const timers = state.players
+      .filter((p) => p.kickRemainingMs !== null)
+      .map((p) => window.setTimeout(() => void refresh(), (p.kickRemainingMs ?? 0) + KICK_NETWORK_GRACE_MS + 150));
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [state, refresh]);
 
   if (missing) {
     return (
@@ -132,6 +145,7 @@ function Room({ code, token }: { code: string; token: string }) {
   }
 
   return (
+    <KickClockContext.Provider value={receivedAt}>
     <main className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 py-4">
       <RoomHeader state={state} />
       {error && <ErrorText>Conexiune instabilă: {error}</ErrorText>}
@@ -142,7 +156,9 @@ function Room({ code, token }: { code: string; token: string }) {
       )}
       <SettingsPanel />
       <LeaveButton state={state} token={token} />
+      <KickModal state={state} token={token} refresh={refresh} />
     </main>
+    </KickClockContext.Provider>
   );
 }
 

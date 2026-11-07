@@ -2,8 +2,9 @@ import "server-only";
 import { sides } from "@/lib/septica";
 import type { RoundResult } from "@/lib/types";
 import { notifyRoom } from "./broadcast";
-import { db, type PlayerRow, type RoomRow, T } from "./db";
-import { listPlayers } from "./room";
+import { db, PLAYER_COLUMNS, type PlayerRow, type RoomRow, T } from "./db";
+import { getRoomByCode, listPlayers } from "./room";
+import { isKickExpired, KICK_ENFORCE_MS } from "@/lib/kick";
 
 /**
  * Removes a player from a room (used by both "leave" and the host's "kick").
@@ -50,4 +51,38 @@ export async function removePlayer(room: RoomRow, player: PlayerRow, reason: str
 
   await notifyRoom(room.id, reason);
   return { roomClosed: false };
+}
+
+/**
+ * Lazy enforcement of pending kicks (serverless: no timers). Runs from requireMember, i.e. at the start of
+ * /state and of every room action. Each expired player is claimed atomically (clear kick_requested_at
+ * where it still has the value we read) so concurrent requests never remove the same player twice;
+ * only the request that got the row runs removePlayer. Returns true when somebody was removed.
+ */
+export async function enforceExpiredKicks(room: RoomRow): Promise<boolean> {
+  const cutoff = new Date(Date.now() - KICK_ENFORCE_MS).toISOString();
+  const { data, error } = await db()
+    .from(T.players)
+    .select(PLAYER_COLUMNS)
+    .eq("room_id", room.id)
+    .lt("kick_requested_at", cutoff);
+  if (error) throw error;
+  const expired = ((data ?? []) as PlayerRow[]).filter((p) => isKickExpired(p.kick_requested_at, Date.now()));
+  let removed = false;
+  let current = room;
+  for (const p of expired) {
+    const { data: claimed, error: claimError } = await db()
+      .from(T.players)
+      .update({ kick_requested_at: null })
+      .eq("id", p.id)
+      .eq("kick_requested_at", p.kick_requested_at)
+      .select(PLAYER_COLUMNS);
+    if (claimError) throw claimError;
+    if (!claimed || claimed.length === 0) continue; // another request got it
+    const { roomClosed } = await removePlayer(current, claimed[0] as PlayerRow, "player_kicked");
+    removed = true;
+    if (roomClosed) break;
+    current = await getRoomByCode(room.code); // re-read: removePlayer bumped the version / host / status
+  }
+  return removed;
 }

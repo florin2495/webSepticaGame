@@ -11,7 +11,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/rooms/[code]/lo
     requireHost(room, player);
     requireStatus(room, "finished");
     await saveRoom(room, { status: "lobby", round: room.round + 1, deal: null, result: null });
-    const { error } = await db().from(T.players).update({ ready: false }).eq("room_id", room.id);
+    const { error } = await db().from(T.players).update({ ready: false, kick_requested_at: null }).eq("room_id", room.id);
     if (error) throw error;
     await notifyRoom(room.id, "back_to_lobby");
     return { ok: true };

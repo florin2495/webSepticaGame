@@ -55,6 +55,8 @@ export interface PlayerRow {
   team: number | null;
   wins: number;
   joined_at: string;
+  /** Pending host kick during a game (null = none). Needs migration 001. */
+  kick_requested_at: string | null;
 }
 
-export const PLAYER_COLUMNS = "id, room_id, nickname, is_host, ready, team, wins, joined_at";
+export const PLAYER_COLUMNS = "id, room_id, nickname, is_host, ready, team, wins, joined_at, kick_requested_at";
