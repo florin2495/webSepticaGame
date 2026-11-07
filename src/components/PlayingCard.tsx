@@ -3,7 +3,7 @@ import { type Card, isRed, rankOf, SUIT_SYMBOL, suitOf } from "@/lib/septica";
 const SIZES = {
   sm: "h-14 w-10 text-sm",
   md: "h-20 w-14 text-lg",
-  lg: "h-28 w-20 text-2xl",
+  lg: "h-24 w-[4.25rem] text-xl sm:h-28 sm:w-20 sm:text-2xl",
 };
 
 /** A face-up playing card drawn with CSS (no images). */

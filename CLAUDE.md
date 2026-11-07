@@ -20,7 +20,7 @@ Migrations are run by hand in the Supabase SQL editor - this list is the source 
 
 | Migration | Applied to the live DB | Notes |
 | --- | --- | --- |
-| `supabase/schema.sql` (initial) | no - pending | `septica_rooms`, `septica_players` |
+| `supabase/schema.sql` (initial) | yes (2026-11-07, verified) | `septica_rooms`, `septica_players`; anon gets 401 |
 
 Rules for schema changes:
 - New migration = new numbered file in `supabase/migrations/`, additive when possible, folded into `supabase/schema.sql`.

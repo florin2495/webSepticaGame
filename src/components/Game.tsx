@@ -62,8 +62,16 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
   const mySeat = game.order.indexOf(me.id);
   const others = [...game.order.slice(mySeat + 1), ...game.order.slice(0, Math.max(mySeat, 0))].filter((id) => id !== me.id);
 
+  const finished = room.status === "finished";
+
   return (
     <>
+      {finished && (
+        <Card>
+          <FinishedPanel state={state} isHost={isHost} busy={busy} run={run} nick={nick} />
+          <ErrorText>{error}</ErrorText>
+        </Card>
+      )}
       <Scoreboard sides={game.sides} players={players} teams={game.teams} meId={me.id} />
 
       <div className={`grid gap-2 ${others.length === 1 ? "grid-cols-1" : others.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
@@ -113,6 +121,7 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
         )}
       </Card>
 
+      {!finished && (
       <Card className={myTurn ? "ring-2 ring-indigo-500" : ""}>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="font-bold">Cărțile tale</h2>
@@ -121,7 +130,7 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
         {game.hand.length === 0 ? (
           <p className="py-4 text-center text-sm text-zinc-500">Nu mai ai cărți.</p>
         ) : (
-          <div className="flex justify-center gap-2">
+          <div className="flex justify-center gap-1.5 sm:gap-2">
             {game.hand.map((c) => {
               const legal = game.legal.includes(c);
               return (
@@ -150,11 +159,6 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
           <ErrorText>{error}</ErrorText>
         </div>
       </Card>
-
-      {room.status === "finished" && (
-        <Card>
-          <FinishedPanel state={state} isHost={isHost} busy={busy} run={run} nick={nick} />
-        </Card>
       )}
 
       {result === null && game.lastTrick && game.trick.length > 0 && (
