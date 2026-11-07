@@ -92,7 +92,7 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
               if (!target) return;
               const msg =
                 room.status === "playing"
-                  ? `Scoți jucătorul ${target.nickname} din joc? Are 10 secunde ca să refuze.`
+                  ? `Scoți jucătorul ${target.nickname} din cameră? Are 10 secunde să refuze.`
                   : `Scoți jucătorul ${target.nickname} din cameră?`;
               if (window.confirm(msg)) void run("kick", { playerId: id });
             }}
