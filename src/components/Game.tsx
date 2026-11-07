@@ -4,7 +4,7 @@ import { useState } from "react";
 import { PREF_CONFIRM_PLAY, useBoolPref } from "@/lib/client/prefs";
 import { type Card as CardT, cuts, type Play, rankLabel, rankOf } from "@/lib/septica";
 import type { GameView, PublicPlayer, RoomState, SideView } from "@/lib/types";
-import { KickBadge } from "./KickBadge";
+import { KickBadge, OfflineBadge } from "./KickBadge";
 import { CardBack, PlayingCard } from "./PlayingCard";
 import { Button, Card, ErrorText } from "./ui";
 import { TEAM_NAMES, TEAM_STYLES, useAction } from "./useAction";
@@ -262,6 +262,7 @@ function Seat({
         {isLeader ? "a început" : ""}
         {!partner && !isLeader ? " " : ""}
       </span>
+      <OfflineBadge connected={player?.connected} />
       <KickBadge remainingMs={player?.kickRemainingMs ?? null} />
       <span className="flex h-8 items-center">
         {Array.from({ length: count }, (_, i) => (

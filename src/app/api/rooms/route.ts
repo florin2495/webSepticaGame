@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { NICKNAME_MAX } from "@/lib/septica";
-import { hashPassword, hashToken, newPlayerToken, newRoomCode } from "@/lib/server/crypto";
+import { hashDeviceId, hashPassword, hashToken, newPlayerToken, newRoomCode } from "@/lib/server/crypto";
 import { db, T } from "@/lib/server/db";
 import { cleanText, fail, handle, isUniqueViolation, readJson } from "@/lib/server/http";
 import { cleanupExpiredRooms } from "@/lib/server/room";
@@ -29,7 +29,7 @@ export async function GET() {
   });
 }
 
-// POST /api/rooms { name, nickname, password?, teams? } - create a room and its host player.
+// POST /api/rooms { name, nickname, password?, teams?, deviceId? } - create a room and its host player.
 export async function POST(req: Request) {
   return handle(async () => {
     await cleanupExpiredRooms();
@@ -59,7 +59,14 @@ export async function POST(req: Request) {
     const token = newPlayerToken();
     const { data: player, error: playerError } = await db()
       .from(T.players)
-      .insert({ room_id: room.id, nickname, token_hash: hashToken(token), is_host: true, team: teams ? 0 : null })
+      .insert({
+        room_id: room.id,
+        nickname,
+        token_hash: hashToken(token),
+        device_hash: hashDeviceId(body.deviceId),
+        is_host: true,
+        team: teams ? 0 : null,
+      })
       .select("id")
       .single();
     if (playerError) throw playerError;

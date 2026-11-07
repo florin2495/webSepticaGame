@@ -22,6 +22,16 @@ export function useKickSeconds(remainingMs: number | null): number | null {
   return Math.ceil(Math.max(0, remainingMs - Math.max(0, now - receivedAt)) / 1000);
 }
 
+/** Shown next to a player not seen for 45 s (phone in the background, closed tab, no network). */
+export function OfflineBadge({ connected }: { connected: boolean | undefined }) {
+  if (connected !== false) return null;
+  return (
+    <span className="shrink-0 rounded bg-zinc-200 px-1.5 text-[10px] font-semibold uppercase text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+      deconectat
+    </span>
+  );
+}
+
 /** "iese în n s" next to a player whose kick is pending. */
 export function KickBadge({ remainingMs }: { remainingMs: number | null }) {
   const seconds = useKickSeconds(remainingMs);

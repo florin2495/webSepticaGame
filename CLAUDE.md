@@ -22,6 +22,7 @@ Migrations are run by hand in the Supabase SQL editor - this list is the source 
 | --- | --- | --- |
 | `supabase/schema.sql` (initial) | yes (2026-11-07, verified) | `septica_rooms`, `septica_players`; anon gets 401 |
 | `supabase/migrations/001_pending_kick.sql` | yes (2026-11-07, verified) | `septica_players.kick_requested_at timestamptz` (kick during a game waits 10 s). Do not push the code before it runs. |
+| `supabase/migrations/002_reconnect.sql` | yes (2026-11-07, verified: service role 200, anon 401) | `septica_players.last_seen_at`, `device_hash` + index (rejoin the same seat). Do not push the code before it runs. |
 
 Rules for schema changes:
 - New migration = new numbered file in `supabase/migrations/`, additive when possible, folded into `supabase/schema.sql`.
@@ -32,6 +33,10 @@ Rules for schema changes:
 - `src/lib/septica.ts` - pure rules (deck, deal, play, let go, scoring, seats/teams). Tested in `septica.test.ts`.
 - `src/lib/server/room.ts` - load/auth, `saveRoom` (version check), `applyMove`, per-player `buildState`.
 - `src/lib/server/deal.ts` - start a deal, balance teams. `membership.ts` - leave/kick (cancels a running round).
+- Rejoin the same seat (`src/lib/reconnect.ts`): every member request stamps `last_seen_at` (at most every 10 s);
+  re-joining with an existing nickname reclaims that seat (same player id, new token; team/ready/wins kept, pending
+  kick cleared) from the same device (`device_hash`) or once the seat has been unseen for 45 s, also mid-deal.
+  `/state` exposes only a derived `connected` flag ("deconectat" badge). Lobby/finished rooms close after 10 min idle.
 
 ## Testing
 - `npm test`, `npx tsc --noEmit`, `npx eslint src`, `npx next build`.

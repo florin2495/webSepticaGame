@@ -22,11 +22,11 @@ export const NICKNAME_MAX = 12;
  * polls /state, which refreshes the timer (see PRESENCE_TOUCH_MS), so a room only closes once nobody
  * has it open.
  */
-export const ROOM_IDLE_MINUTES = 2;
+export const ROOM_IDLE_MINUTES = 10;
 /** /state refreshes last_activity_at at most this often, to keep DB writes low. */
 export const PRESENCE_TOUCH_MS = 20_000;
 
-/** "2 minute" / "60 de minute" (Romanian numeral agreement). */
+/** "2 minute" / "10 minute" / "60 de minute" (Romanian numeral agreement). */
 export function minutesLabel(n: number): string {
   return `${n} ${n >= 20 ? "de " : ""}${n === 1 ? "minut" : "minute"}`;
 }

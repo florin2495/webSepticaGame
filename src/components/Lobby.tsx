@@ -3,7 +3,7 @@
 import { MAX_PLAYERS, MIN_PLAYERS, teamProblem } from "@/lib/septica";
 import type { PublicPlayer, RoomState } from "@/lib/types";
 import { Rules } from "./Home";
-import { KickBadge } from "./KickBadge";
+import { KickBadge, OfflineBadge } from "./KickBadge";
 import { Button, Card, ErrorText, Toggle } from "./ui";
 import { TEAM_NAMES, TEAM_STYLES, useAction } from "./useAction";
 
@@ -32,6 +32,7 @@ export function Lobby({ state, token, refresh }: { state: RoomState; token: stri
           {p.id === me.id && <span className="text-zinc-500"> (tu)</span>}
         </span>
         {p.isHost && <span className="rounded bg-zinc-200 px-1.5 text-[10px] font-semibold uppercase dark:bg-zinc-800">host</span>}
+        <OfflineBadge connected={p.connected} />
         <KickBadge remainingMs={p.kickRemainingMs} />
         {p.wins > 0 && <span className="text-xs text-amber-600">🏆{p.wins}</span>}
       </span>

@@ -25,7 +25,7 @@ create table if not exists public.septica_rooms (
   version          integer not null default 0,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now(),
-  last_activity_at timestamptz not null default now()      -- lobby/finished rooms idle > 2 min are deleted
+  last_activity_at timestamptz not null default now()      -- lobby/finished rooms idle > 10 min are deleted
 );
 create index if not exists septica_rooms_status_activity_idx on public.septica_rooms (status, last_activity_at);
 
@@ -43,12 +43,17 @@ create table if not exists public.septica_players (
   team       smallint check (team is null or team in (0, 1)),
   wins       integer not null default 0 check (wins >= 0),
   joined_at  timestamptz not null default now(),
-  kick_requested_at timestamptz                            -- pending host kick during a game (null = none), see migrations/001
+  kick_requested_at timestamptz,                           -- pending host kick during a game (null = none), see migrations/001
+  last_seen_at timestamptz not null default now(),         -- presence: disconnected after 45 s, see migrations/002
+  device_hash  text                                        -- sha256 of the browser's device id, see migrations/002
 );
--- For databases created before migration 001:
+-- For databases created before migrations 001 / 002:
 alter table public.septica_players add column if not exists kick_requested_at timestamptz;
+alter table public.septica_players add column if not exists last_seen_at timestamptz not null default now();
+alter table public.septica_players add column if not exists device_hash text;
 create unique index if not exists septica_players_room_nickname_uq on public.septica_players (room_id, lower(nickname));
 create index if not exists septica_players_room_idx on public.septica_players (room_id);
+create index if not exists septica_players_room_seen_idx on public.septica_players (room_id, last_seen_at);
 
 do $$ begin
   alter table public.septica_rooms

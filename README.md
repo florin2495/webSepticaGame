@@ -29,7 +29,7 @@ Domeniu: https://septica.hailatat.icu
 - **Joacă pentru el:** dacă cineva nu mai răspunde, host-ul poate juca în locul lui (cea mai mică carte, sau lasă mâna).
 - **Părăsește / Scoate:** dacă pleacă cineva în timpul unei runde, runda se anulează (Șeptica nu poate continua cu
   un loc gol). Dacă pleacă host-ul, devine host următorul jucător. Când pleacă ultimul, camera se închide.
-- **Închidere automată:** o cameră în lobby, sau după rundă, se închide după 2 minute în care nimeni nu o are deschisă.
+- **Închidere automată:** o cameră în lobby, sau după rundă, se închide după 10 minute în care nimeni nu o are deschisă.
 - **Confirmare la jucarea cărții:** opțională, din Setări.
 
 ## Arhitectură, pe scurt
