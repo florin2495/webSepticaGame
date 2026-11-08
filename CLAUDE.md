@@ -23,6 +23,8 @@ Migrations are run by hand in the Supabase SQL editor - this list is the source 
 | `supabase/schema.sql` (initial) | yes (2026-11-07, verified) | `septica_rooms`, `septica_players`; anon gets 401 |
 | `supabase/migrations/001_pending_kick.sql` | yes (2026-11-07, verified) | `septica_players.kick_requested_at timestamptz` (kick during a game waits 10 s). Do not push the code before it runs. |
 | `supabase/migrations/002_reconnect.sql` | yes (2026-11-07, verified: service role 200, anon 401) | `septica_players.last_seen_at`, `device_hash` + index (rejoin the same seat). Do not push the code before it runs. |
+| `supabase/migrations/003_seat_spectator.sql` | **no** (written 2026-11-08, will be merged into the user's single combined script) | `septica_players.seat`, `role` ('player'/'spectator'), `queued_at` (reorder + spectators). Idempotent. Do not push the code before it runs. |
+| hub `hub_leaderboard*` (owned by the hub repo) | no | `src/lib/server/leaderboard.ts` writes to it at the end of a round (errors are swallowed). Do not push before the hub migration ran. |
 
 Rules for schema changes:
 - New migration = new numbered file in `supabase/migrations/`, additive when possible, folded into `supabase/schema.sql`.

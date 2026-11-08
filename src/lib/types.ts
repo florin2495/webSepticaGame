@@ -15,6 +15,9 @@ export interface PublicPlayer {
   kickRemainingMs: number | null;
   /** Seen in the last 45 s (see lib/reconnect.ts). False = phone in the background, closed tab, no network. */
   connected: boolean;
+  role: "player" | "spectator";
+  /** Spectator who asked to join the next round. */
+  queued: boolean;
 }
 
 export interface SideView {
@@ -67,6 +70,8 @@ export interface RoomState {
   };
   /** Seat order while playing/finished, join order in the lobby. */
   players: PublicPlayer[];
+  /** Watchers (max 16), queued ones first. Never get hands. */
+  spectators: PublicPlayer[];
   me: PublicPlayer;
   game: GameView | null;
   result: RoundResult | null;

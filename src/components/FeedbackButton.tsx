@@ -14,17 +14,12 @@ export function FeedbackButton({ compact = false }: { compact?: boolean }) {
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
   const nickname = useStringPref(PREF_NICKNAME);
-  const area = useRef<HTMLTextAreaElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
 
   function close() {
     setOpen(false);
     opener.current?.focus();
   }
-
-  useEffect(() => {
-    if (open) area.current?.focus();
-  }, [open]);
 
   useEffect(() => {
     if (!sent) return;
@@ -76,8 +71,9 @@ export function FeedbackButton({ compact = false }: { compact?: boolean }) {
         💬 Feedback
       </button>
       {open && (
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/50">
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          className="flex min-h-full items-start justify-center p-4 pt-[max(1rem,env(safe-area-inset-top))] sm:items-center"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) close();
           }}
@@ -103,7 +99,6 @@ export function FeedbackButton({ compact = false }: { compact?: boolean }) {
                 <label className="flex flex-col gap-1 text-sm font-medium">
                   Ce problemă ai găsit sau ce am putea îmbunătăți?
                   <textarea
-                    ref={area}
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     maxLength={MAX}
@@ -143,6 +138,7 @@ export function FeedbackButton({ compact = false }: { compact?: boolean }) {
               </form>
             )}
           </div>
+        </div>
         </div>
       )}
     </>

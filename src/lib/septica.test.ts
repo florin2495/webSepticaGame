@@ -10,6 +10,8 @@ import {
   newDeal,
   playCard,
   pointsOf,
+  isPermutation,
+  movedOrder,
   roundLeader,
   RuleError,
   seatOrder,
@@ -172,8 +174,26 @@ describe("full random games", () => {
 });
 
 describe("seats and teams", () => {
-  it("free-for-all: host first, then join order", () => {
-    expect(seatOrder([{ id: "a", team: null }, { id: "b", team: null }, { id: "c", team: null }], "b", false)).toEqual(["b", "a", "c"]);
+  it("free-for-all: saved seat order", () => {
+    expect(seatOrder([{ id: "b", team: null }, { id: "a", team: null }, { id: "c", team: null }], false)).toEqual(["b", "a", "c"]);
+  });
+  it("movedOrder swaps neighbours (same team only in team rooms)", () => {
+    const p = [
+      { id: "a", team: 0 },
+      { id: "b", team: 1 },
+      { id: "c", team: 0 },
+      { id: "d", team: 1 },
+    ];
+    expect(movedOrder(p, "b", -1, false)).toEqual(["b", "a", "c", "d"]);
+    expect(movedOrder(p, "a", -1, false)).toBeNull();
+    expect(movedOrder(p, "c", -1, true)).toEqual(["c", "b", "a", "d"]);
+    expect(movedOrder(p, "b", -1, true)).toBeNull();
+  });
+  it("isPermutation checks every id once", () => {
+    expect(isPermutation(["b", "a"], ["a", "b"])).toBe(true);
+    expect(isPermutation(["a", "a"], ["a", "b"])).toBe(false);
+    expect(isPermutation(["a"], ["a", "b"])).toBe(false);
+    expect(isPermutation("ab", ["a", "b"])).toBe(false);
   });
   it("teams: partners sit opposite, host in seat 0", () => {
     const players = [
@@ -182,7 +202,7 @@ describe("seats and teams", () => {
       { id: "c", team: 1 },
       { id: "d", team: 1 },
     ];
-    const order = seatOrder(players, "c", true);
+    const order = seatOrder([players[2], players[0], players[3], players[1]], true);
     expect(order[0]).toBe("c");
     expect(order[2]).toBe("d");
     expect([order[1], order[3]].sort()).toEqual(["a", "b"]);

@@ -1,4 +1,4 @@
-import { startDeal } from "@/lib/server/deal";
+import { promoteQueued, startDeal } from "@/lib/server/deal";
 import { handle } from "@/lib/server/http";
 import { requireHost, requireMember, requireStatus } from "@/lib/server/room";
 
@@ -9,6 +9,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/rooms/[code]/ne
     const { room, player } = await requireMember(req, code);
     requireHost(room, player);
     requireStatus(room, "finished");
+    await promoteQueued(room);
     await startDeal(room, room.round + 1, false);
     return { ok: true };
   });

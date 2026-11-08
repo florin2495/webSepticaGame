@@ -6,7 +6,7 @@ import { requireMember } from "@/lib/server/room";
 export async function POST(req: Request, ctx: RouteContext<"/api/rooms/[code]/leave">) {
   return handle(async () => {
     const { code } = await ctx.params;
-    const { room, player } = await requireMember(req, code);
+    const { room, player } = await requireMember(req, code, { allowSpectator: true });
     const { roomClosed } = await removePlayer(room, player, "player_left");
     return { ok: true, roomClosed };
   });

@@ -3,7 +3,7 @@ import { MAX_PLAYERS, MIN_PLAYERS, newDeal, roundLeader, seatOrder, teamProblem 
 import { notifyRoom } from "./broadcast";
 import { db, type RoomRow, T } from "./db";
 import { fail } from "./http";
-import { listPlayers, saveRoom } from "./room";
+import { listPlayers, listSpectators, saveRoom } from "./room";
 
 /** Deals round `round` to everyone in the room (host only, checked by the caller). */
 export async function startDeal(room: RoomRow, round: number, requireReady: boolean): Promise<void> {
@@ -17,7 +17,7 @@ export async function startDeal(room: RoomRow, round: number, requireReady: bool
   const problem = teamProblem(players, room.teams);
   if (problem) fail(409, problem);
 
-  const order = seatOrder(players, room.host_player_id, room.teams);
+  const order = seatOrder(players, room.teams);
   const deal = newDeal(order, roundLeader(order, round), room.teams);
   await saveRoom(room, { status: "playing", round, deal, result: null });
   const { error } = await db().from(T.players).update({ kick_requested_at: null }).eq("room_id", room.id);
@@ -36,4 +36,29 @@ export async function balanceTeams(roomId: string): Promise<void> {
     const { error } = await db().from(T.players).update({ team }).eq("id", p.id);
     if (error) throw error;
   }
+}
+
+/**
+ * Spectators who queued ("Intră la runda următoare") become players, in queue order, while seats are free.
+ * The rest stay spectators. Called before a new round / when going back to the lobby.
+ */
+export async function promoteQueued(room: RoomRow): Promise<number> {
+  const players = await listPlayers(room.id);
+  const queued = (await listSpectators(room.id)).filter((s) => s.queued_at !== null);
+  let seat = players.reduce((m, p) => Math.max(m, p.seat), -1) + 1;
+  let count = players.length;
+  let promoted = 0;
+  for (const s of queued) {
+    if (count >= MAX_PLAYERS) break;
+    const { error } = await db()
+      .from(T.players)
+      .update({ role: "player", queued_at: null, seat: seat++, ready: false, team: null, wins: 0 })
+      .eq("id", s.id)
+      .eq("role", "spectator");
+    if (error) throw error;
+    count++;
+    promoted++;
+  }
+  if (promoted > 0 && room.teams) await balanceTeams(room.id);
+  return promoted;
 }

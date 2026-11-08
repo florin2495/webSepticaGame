@@ -2,6 +2,7 @@
 
 import { MAX_PLAYERS, MIN_PLAYERS, teamProblem } from "@/lib/septica";
 import type { PublicPlayer, RoomState } from "@/lib/types";
+import { OrderControls } from "./Game";
 import { Rules } from "./Home";
 import { KickBadge, OfflineBadge } from "./KickBadge";
 import { Button, Card, ErrorText, Toggle } from "./ui";
@@ -57,6 +58,17 @@ export function Lobby({ state, token, refresh }: { state: RoomState; token: stri
     </li>
   );
 
+  if (me.role === "spectator") {
+    return (
+      <Card>
+        <h2 className="mb-1 font-bold">
+          Jucători ({players.length}/{MAX_PLAYERS})
+        </h2>
+        <ul className="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">{players.map(row)}</ul>
+      </Card>
+    );
+  }
+
   return (
     <>
       <Card>
@@ -83,6 +95,16 @@ export function Lobby({ state, token, refresh }: { state: RoomState; token: stri
           <ul className="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">{players.map(row)}</ul>
         )}
       </Card>
+
+      {isHost && players.length > 1 && (
+        <Card className="flex flex-col gap-2">
+          <h2 className="font-bold">Ordinea de joc</h2>
+          <p className="text-xs text-zinc-500">
+            Primul din listă începe runda 1; apoi începutul trece la următorul. {room.teams && "Pe echipe, partenerii stau față în față și se mută doar în echipa lor."}
+          </p>
+          <OrderControls state={state} busy={busy} run={run} nextRound={room.round} />
+        </Card>
+      )}
 
       <Card className="flex flex-col gap-3">
         <Toggle

@@ -14,6 +14,13 @@ import { isKickExpired, KICK_ENFORCE_MS } from "@/lib/kick";
  *    (status finished, no winner). The host can then deal again or go back to the lobby.
  */
 export async function removePlayer(room: RoomRow, player: PlayerRow, reason: string): Promise<{ roomClosed: boolean }> {
+  if (player.role === "spectator") {
+    // A watcher leaving changes nothing about the game.
+    const { error } = await db().from(T.players).delete().eq("id", player.id);
+    if (error) throw error;
+    await notifyRoom(room.id, reason);
+    return { roomClosed: false };
+  }
   const now = new Date().toISOString();
   const remaining = (await listPlayers(room.id)).filter((p) => p.id !== player.id);
 

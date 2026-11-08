@@ -7,7 +7,7 @@ import { buildState, requireMember, touchRoom } from "@/lib/server/room";
 export async function GET(req: Request, ctx: RouteContext<"/api/rooms/[code]/state">) {
   return handle(async () => {
     const { code } = await ctx.params;
-    const { room, player } = await requireMember(req, code);
+    const { room, player } = await requireMember(req, code, { allowSpectator: true });
     if (Date.now() - new Date(room.last_activity_at).getTime() > PRESENCE_TOUCH_MS) {
       await touchRoom(room.id);
     }

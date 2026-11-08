@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { PREF_CONFIRM_PLAY, useBoolPref } from "@/lib/client/prefs";
-import { type Card as CardT, cuts, type Play, rankLabel, rankOf } from "@/lib/septica";
+import { type Card as CardT, cuts, movedOrder, type Play, rankLabel, rankOf } from "@/lib/septica";
 import type { GameView, PublicPlayer, RoomState, SideView } from "@/lib/types";
 import { KickBadge, OfflineBadge } from "./KickBadge";
 import { CardBack, PlayingCard } from "./PlayingCard";
@@ -20,6 +20,31 @@ function holderIndex(trick: Play[]): number {
   return idx;
 }
 
+type SeatPos = "top" | "left" | "right" | "bottom";
+
+/** Position of the player `k` seats after the viewer (k = 0 is the viewer). */
+function seatPos(k: number, n: number): SeatPos {
+  if (k === 0) return "bottom";
+  if (n === 2) return "top";
+  if (n === 3) return k === 1 ? "left" : "right";
+  return k === 1 ? "left" : k === 2 ? "top" : "right";
+}
+
+const SEAT_CELL: Record<SeatPos, string> = {
+  top: "col-start-2 row-start-1",
+  left: "col-start-1 row-start-2",
+  right: "col-start-3 row-start-2",
+  bottom: "col-start-2 row-start-3",
+};
+
+/** Where a card lands on the felt (% of its width / height), by the seat of whoever played it. */
+const FELT_SPOT: Record<SeatPos, [number, number]> = {
+  top: [50, 22],
+  left: [22, 50],
+  right: [78, 50],
+  bottom: [50, 78],
+};
+
 export function Game({ state, token, refresh }: { state: RoomState; token: string; refresh: () => Promise<void> }) {
   const { room, players, me, game, result } = state;
   const isHost = room.hostPlayerId === me.id;
@@ -27,7 +52,7 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
   const [confirmPlay] = useBoolPref(PREF_CONFIRM_PLAY, false);
   const [selected, setSelected] = useState<CardT | null>(null);
 
-  const byId = new Map(players.map((p) => [p.id, p]));
+  const byId = new Map([...players, ...state.spectators].map((p) => [p.id, p]));
   const nick = (id: string | null | undefined) => (id ? (byId.get(id)?.nickname ?? "cineva") : "cineva");
 
   if (!game) {
@@ -59,9 +84,16 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
   const leadRank = game.trick[0] ? rankOf(game.trick[0].card) : null;
   const status = statusText(game, me.id, nick, room.status === "finished");
 
-  // Other seats, in play order starting after me.
-  const mySeat = game.order.indexOf(me.id);
-  const others = [...game.order.slice(mySeat + 1), ...game.order.slice(0, Math.max(mySeat, 0))].filter((id) => id !== me.id);
+  // Table seats: the viewer is always at the bottom, the next player to the left, the third on top (the partner
+  // in teams), the previous one to the right. A spectator watches from seat 0.
+  const isSpectator = me.role === "spectator";
+  const anchor = isSpectator ? game.order[0] : me.id;
+  const seatCount = game.order.length;
+  const anchorIdx = Math.max(game.order.indexOf(anchor), 0);
+  const seats: Partial<Record<SeatPos, string>> = {};
+  game.order.forEach((id, i) => {
+    seats[seatPos((i - anchorIdx + seatCount) % seatCount, seatCount)] = id;
+  });
 
   const finished = room.status === "finished";
 
@@ -75,35 +107,7 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
       )}
       <Scoreboard sides={game.sides} players={players} teams={game.teams} meId={me.id} />
 
-      <div className={`grid gap-2 ${others.length === 1 ? "grid-cols-1" : others.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
-        {others.map((id) => (
-          <Seat
-            key={id}
-            player={byId.get(id)}
-            count={game.handCounts[id] ?? 0}
-            isTurn={game.turn === id}
-            isLeader={game.leader === id && game.trick.length > 0}
-            partner={game.teams && byId.get(id)?.team === me.team}
-            canSkip={isHost && game.turn === id && room.status === "playing"}
-            busy={busy !== null}
-            canKick={isHost}
-            onKick={() => {
-              const target = byId.get(id);
-              if (!target) return;
-              const msg =
-                room.status === "playing"
-                  ? `Scoți jucătorul ${target.nickname} din cameră? Are 10 secunde să refuze; dacă nu, runda se anulează pentru toți.`
-                  : `Scoți jucătorul ${target.nickname} din cameră?`;
-              if (window.confirm(msg)) void run("kick", { playerId: id });
-            }}
-            onSkip={() => {
-              if (window.confirm(`Joci în locul lui ${nick(id)}? (cartea cea mai mică, sau lasă mâna)`)) void run("skip");
-            }}
-          />
-        ))}
-      </div>
-
-      <Card className="flex flex-col items-center gap-3">
+      <Card className="flex flex-col gap-2">
         <div className="flex w-full items-center justify-between text-xs text-zinc-500">
           <span className="flex items-center gap-2">
             {game.stockCount > 0 ? <CardBack size="sm" className="!h-7 !w-5" /> : null}
@@ -112,10 +116,45 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
           <span>Mâna {game.tricksPlayed + (game.trick.length > 0 ? 1 : 0)}</span>
         </div>
 
-        <TrickArea game={game} nick={nick} />
+        <div className="grid grid-cols-[1fr_1.15fr_1fr] items-center gap-1.5">
+          {(["top", "left", "right", "bottom"] as const).map((pos) => {
+            const id = seats[pos];
+            if (!id) return null;
+            const isMe = id === me.id;
+            return (
+              <div key={pos} className={SEAT_CELL[pos]}>
+                <Seat
+                  player={byId.get(id)}
+                  seatNo={game.order.indexOf(id) + 1}
+                  count={game.handCounts[id] ?? 0}
+                  isMe={isMe}
+                  isTurn={game.turn === id}
+                  isLeader={game.leader === id && game.trick.length > 0}
+                  partner={game.teams && !isMe && byId.get(id)?.team === byId.get(anchor)?.team}
+                  canSkip={isHost && !isMe && game.turn === id && room.status === "playing"}
+                  busy={busy !== null}
+                  canKick={isHost && !isMe}
+                  onKick={() => {
+                    const target = byId.get(id);
+                    if (!target) return;
+                    const msg =
+                      room.status === "playing"
+                        ? `Scoți jucătorul ${target.nickname} din cameră? Are 10 secunde să refuze; dacă nu, runda se anulează pentru toți.`
+                        : `Scoți jucătorul ${target.nickname} din cameră?`;
+                    if (window.confirm(msg)) void run("kick", { playerId: id });
+                  }}
+                  onSkip={() => {
+                    if (window.confirm(`Joci în locul lui ${nick(id)}? (cartea cea mai mică, sau lasă mâna)`)) void run("skip");
+                  }}
+                />
+              </div>
+            );
+          })}
+          <TrickTable game={game} anchorIdx={anchorIdx} seatCount={seatCount} nick={nick} />
+        </div>
 
         {leadRank && (
-          <p className="text-xs text-zinc-500">
+          <p className="text-center text-xs text-zinc-500">
             Taie: <b>{rankLabel(leadRank)}</b> sau <b>7</b>
           </p>
         )}
@@ -132,7 +171,7 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
         )}
       </Card>
 
-      {!finished && (
+      {!finished && !isSpectator && (
       <Card className={myTurn ? "ring-2 ring-indigo-500" : ""}>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="font-bold">Cărțile tale</h2>
@@ -191,32 +230,56 @@ function statusText(game: GameView, meId: string, nick: (id: string | null) => s
     return `E rândul tău. Taie cu ${lead} sau 7, ori pune altă carte.`;
   }
   if (game.phase === "decide") return `${nick(game.turn)} decide dacă mai continuă mâna…`;
+  if (game.trick.length === 0) return `${nick(game.turn)} începe mâna…`;
   return `Așteaptă pe ${nick(game.turn)}…`;
 }
 
-function TrickArea({ game, nick }: { game: GameView; nick: (id: string | null) => string }) {
+/** The table: every card lies in front of the seat that played it; the card holding the trick is ringed. */
+function TrickTable({
+  game,
+  anchorIdx,
+  seatCount,
+  nick,
+}: {
+  game: GameView;
+  anchorIdx: number;
+  seatCount: number;
+  nick: (id: string | null) => string;
+}) {
   const showingLast = game.trick.length === 0 && game.lastTrick !== null;
   const plays = showingLast ? game.lastTrick!.plays : game.trick;
   const hi = holderIndex(plays);
-
-  if (plays.length === 0) {
-    return <div className="flex h-28 items-center text-sm text-zinc-400">Masa e goală.</div>;
-  }
+  const spot = (id: string): [number, number] => {
+    const k = (game.order.indexOf(id) - anchorIdx + seatCount) % seatCount;
+    return FELT_SPOT[seatPos(k, seatCount)];
+  };
   return (
-    <div className="flex w-full flex-col items-center gap-1">
-      <div className={`flex min-h-28 flex-wrap justify-center gap-1.5 ${showingLast ? "opacity-60" : ""}`}>
-        {plays.map((p, i) => (
-          <span key={`${p.card}-${i}`} className="flex flex-col items-center gap-0.5">
-            <PlayingCard card={p.card} size="md" className={i === hi ? "ring-4 ring-amber-400" : ""} />
-            <span className="max-w-14 truncate text-[10px] text-zinc-500">{nick(p.playerId)}</span>
-          </span>
-        ))}
-      </div>
+    <div
+      className={`relative row-start-2 min-h-32 rounded-2xl bg-emerald-800 shadow-inner ${
+        seatCount === 2 ? "col-span-3 col-start-1 h-36" : "col-start-2 aspect-square"
+      }`}
+    >
+      {plays.length === 0 ? (
+        <span className="absolute inset-0 flex items-center justify-center text-xs text-emerald-100/80">Masa e goală</span>
+      ) : (
+        plays.map((p, i) => {
+          const [x, y] = spot(p.playerId);
+          return (
+            <span
+              key={`${p.card}-${i}`}
+              className={`absolute -translate-x-1/2 -translate-y-1/2 ${showingLast ? "opacity-60" : ""}`}
+              style={{ left: `${x}%`, top: `${y}%` }}
+              title={nick(p.playerId)}
+            >
+              <PlayingCard card={p.card} size="sm" className={`!h-12 !w-9 ${i === hi ? "ring-4 ring-amber-400" : ""}`} />
+            </span>
+          );
+        })
+      )}
       {showingLast && (
-        <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
-          {nick(game.lastTrick!.winner)} a luat mâna (+{game.lastTrick!.points}{" "}
-          {game.lastTrick!.points === 1 ? "punct" : "puncte"})
-        </p>
+        <span className="absolute inset-x-1 bottom-1 truncate text-center text-[10px] font-semibold text-emerald-50">
+          {nick(game.lastTrick!.winner)} a luat mâna (+{game.lastTrick!.points})
+        </span>
       )}
     </div>
   );
@@ -224,7 +287,9 @@ function TrickArea({ game, nick }: { game: GameView; nick: (id: string | null) =
 
 function Seat({
   player,
+  seatNo,
   count,
+  isMe,
   isTurn,
   isLeader,
   partner,
@@ -235,7 +300,9 @@ function Seat({
   onSkip,
 }: {
   player: PublicPlayer | undefined;
+  seatNo: number;
   count: number;
+  isMe: boolean;
   isTurn: boolean;
   isLeader: boolean;
   partner: boolean;
@@ -256,20 +323,40 @@ function Seat({
         {isTurn && "▶ "}
         {player?.nickname ?? "?"}
       </span>
-      <span className="text-[10px] uppercase text-zinc-500">
-        {partner ? "partener" : ""}
-        {partner && isLeader ? " · " : ""}
-        {isLeader ? "a început" : ""}
-        {!partner && !isLeader ? " " : ""}
+      <span className="flex min-h-4 flex-wrap justify-center gap-1">
+        <span
+          className="rounded-full bg-zinc-200 px-1.5 text-[9px] font-bold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+          title="Locul în ordinea de joc"
+        >
+          {seatNo}
+        </span>
+        {isMe && (
+          <span className="rounded-full bg-zinc-800 px-1.5 text-[9px] font-bold uppercase text-white dark:bg-zinc-100 dark:text-zinc-900">
+            tu
+          </span>
+        )}
+        {isLeader && (
+          <span className="rounded-full bg-amber-400 px-1.5 text-[9px] font-bold uppercase text-amber-950">a început</span>
+        )}
+        {isTurn && (
+          <span className="rounded-full bg-indigo-600 px-1.5 text-[9px] font-bold uppercase text-white">
+            {isMe ? "rândul tău" : "urmează"}
+          </span>
+        )}
+        {partner && (
+          <span className="rounded-full border border-zinc-400 px-1.5 text-[9px] font-bold uppercase text-zinc-500">partener</span>
+        )}
       </span>
       <OfflineBadge connected={player?.connected} />
       <KickBadge remainingMs={player?.kickRemainingMs ?? null} />
-      <span className="flex h-8 items-center">
-        {Array.from({ length: count }, (_, i) => (
-          <CardBack key={i} size="sm" className={`!h-8 !w-6 ${i > 0 ? "-ml-3" : ""}`} />
-        ))}
-        {count === 0 && <span className="text-xs text-zinc-400">fără cărți</span>}
-      </span>
+      {!isMe && (
+        <span className="flex h-8 items-center">
+          {Array.from({ length: count }, (_, i) => (
+            <CardBack key={i} size="sm" className={`!h-8 !w-6 ${i > 0 ? "-ml-3" : ""}`} />
+          ))}
+          {count === 0 && <span className="text-xs text-zinc-400">fără cărți</span>}
+        </span>
+      )}
       {canKick && player && player.kickRemainingMs === null && (
         <button
           type="button"
@@ -316,6 +403,62 @@ function Scoreboard({ sides, players, teams, meId }: { sides: SideView[]; player
         </span>
       ))}
     </div>
+  );
+}
+
+/** Host-only up/down arrows to set the play order (first = starts the next round). */
+export function OrderControls({
+  state,
+  busy,
+  run,
+  nextRound,
+}: {
+  state: RoomState;
+  busy: string | null;
+  run: (action: string, body?: unknown) => Promise<void>;
+  /** Round number the order applies to (round 1 starts with the first player, then it moves one seat each round). */
+  nextRound: number;
+}) {
+  const { players, room } = state;
+  const startIdx = players.length > 0 ? (((nextRound - 1) % players.length) + players.length) % players.length : 0;
+  return (
+    <ol className="mx-auto flex w-full max-w-xs flex-col gap-1 text-left text-sm">
+      {players.map((p, i) => {
+        const up = movedOrder(players, p.id, -1, room.teams);
+        const down = movedOrder(players, p.id, 1, room.teams);
+        const btn =
+          "min-h-8 min-w-8 rounded-md border border-zinc-300 text-sm font-bold disabled:opacity-30 dark:border-zinc-700";
+        return (
+          <li key={p.id} className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 px-3 py-1 dark:bg-zinc-900">
+            <span className="min-w-0 truncate">
+              <span className="mr-2 text-xs font-bold text-zinc-500">{i + 1}</span>
+              {p.nickname}
+              {i === startIdx && <span className="ml-2 text-[10px] font-bold uppercase text-amber-600">începe</span>}
+            </span>
+            <span className="flex shrink-0 gap-1">
+              <button
+                type="button"
+                className={btn}
+                disabled={busy !== null || !up}
+                onClick={() => up && void run("reorder", { order: up })}
+                aria-label={`Mută ${p.nickname} mai sus`}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className={btn}
+                disabled={busy !== null || !down}
+                onClick={() => down && void run("reorder", { order: down })}
+                aria-label={`Mută ${p.nickname} mai jos`}
+              >
+                ↓
+              </button>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -366,14 +509,20 @@ function FinishedPanel({
         {players.map((p) => `${p.nickname} ${p.wins}`).join(" · ")}
       </p>
       {isHost ? (
-        <div className="grid grid-cols-2 gap-2">
-          <Button disabled={busy !== null} onClick={() => void run("new-round")}>
-            {busy === "new-round" ? "Se împarte…" : "Rundă nouă"}
-          </Button>
-          <Button variant="secondary" disabled={busy !== null} onClick={() => void run("lobby")}>
-            Înapoi în lobby
-          </Button>
-        </div>
+        <>
+          <div className="flex flex-col gap-1">
+            <h3 className="text-sm font-bold">Ordinea la runda următoare</h3>
+            <OrderControls state={state} busy={busy} run={run} nextRound={room.round + 1} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button disabled={busy !== null} onClick={() => void run("new-round")}>
+              {busy === "new-round" ? "Se împarte…" : "Rundă nouă"}
+            </Button>
+            <Button variant="secondary" disabled={busy !== null} onClick={() => void run("lobby")}>
+              Înapoi în lobby
+            </Button>
+          </div>
+        </>
       ) : (
         <p className="text-sm text-zinc-500">Host-ul pornește runda următoare.</p>
       )}

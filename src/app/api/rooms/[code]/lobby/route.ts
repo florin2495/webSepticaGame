@@ -1,3 +1,4 @@
+import { promoteQueued } from "@/lib/server/deal";
 import { notifyRoom } from "@/lib/server/broadcast";
 import { db, T } from "@/lib/server/db";
 import { handle } from "@/lib/server/http";
@@ -13,6 +14,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/rooms/[code]/lo
     await saveRoom(room, { status: "lobby", round: room.round + 1, deal: null, result: null });
     const { error } = await db().from(T.players).update({ ready: false, kick_requested_at: null }).eq("room_id", room.id);
     if (error) throw error;
+    await promoteQueued(room);
     await notifyRoom(room.id, "back_to_lobby");
     return { ok: true };
   });

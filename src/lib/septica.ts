@@ -281,23 +281,45 @@ export function winningSides(all: Side[]): Side[] {
 }
 
 /**
- * Seat order for a new game. Free-for-all: host first, then join order.
- * Teams: alternate the two teams (host's team first, host in seat 0), so partners sit opposite.
+ * Seat order for a new game; `players` is already in saved seat order (the host can reorder it).
+ * Free-for-all: that order. Teams: alternate the two teams (team of the first player first), so partners sit opposite.
  */
-export function seatOrder(
+export function seatOrder(players: { id: string; team: number | null }[], teams: boolean): string[] {
+  const bySeat = players.map((p) => p.id);
+  if (!teams) return bySeat;
+  const first = players[0];
+  const mine = players.filter((p) => p.team === first.team).map((p) => p.id);
+  const theirs = players.filter((p) => p.team !== first.team).map((p) => p.id);
+  return [mine[0], theirs[0], mine[1], theirs[1]];
+}
+
+/** True when `order` lists every id of `ids` exactly once. */
+export function isPermutation(order: unknown, ids: string[]): order is string[] {
+  if (!Array.isArray(order) || order.length !== ids.length) return false;
+  const seen = new Set<unknown>(order);
+  return seen.size === ids.length && ids.every((id) => seen.has(id));
+}
+
+/**
+ * New order after moving `id` one step up (-1) or down (+1). `players` is in seat order. In team rooms the
+ * player swaps with the neighbour of the same team (partners sit opposite, the team is fixed by the lobby).
+ * Null when it cannot move.
+ */
+export function movedOrder(
   players: { id: string; team: number | null }[],
-  hostId: string | null,
+  id: string,
+  dir: -1 | 1,
   teams: boolean,
-): string[] {
-  const byJoin = players.map((p) => p.id);
-  if (!teams) {
-    return hostId && byJoin.includes(hostId) ? [hostId, ...byJoin.filter((id) => id !== hostId)] : byJoin;
-  }
-  const host = players.find((p) => p.id === hostId) ?? players[0];
-  const mine = players.filter((p) => p.team === host.team).map((p) => p.id);
-  const theirs = players.filter((p) => p.team !== host.team).map((p) => p.id);
-  const a = [host.id, ...mine.filter((id) => id !== host.id)];
-  return [a[0], theirs[0], a[1], theirs[1]];
+): string[] | null {
+  const ids = players.map((p) => p.id);
+  const i = ids.indexOf(id);
+  if (i < 0) return null;
+  const group = teams ? players.filter((p) => p.team === players[i].team) : players;
+  const target = group[group.findIndex((p) => p.id === id) + dir];
+  if (!target) return null;
+  const j = ids.indexOf(target.id);
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  return ids;
 }
 
 /** Round 1 is led by seat 0, then the first leader moves one seat each round. */
