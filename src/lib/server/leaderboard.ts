@@ -5,7 +5,8 @@ import { db } from "./db";
  * Hub leaderboard (contract C). Tables belong to the hub (hub_leaderboard, hub_leaderboard_rounds); this
  * game only writes them, with the service key, like hub_feedback. Needs the hub's leaderboard migration.
  */
-const GAME = "septica";
+// LEADERBOARD_GAME lets local dev/tests write to a throwaway game instead of the real one.
+const GAME = process.env.LEADERBOARD_GAME?.trim() || "septica";
 
 /** One person = one lowercase, trimmed nickname (there are no accounts). */
 export const playerKey = (nickname: string) => nickname.trim().toLowerCase();

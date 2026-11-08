@@ -30,7 +30,31 @@ async function call(path, { token, body, method } = {}) {
   return { status: res.status, data, region: res.headers.get("x-vercel-id") };
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)/.test(BASE);
+const envFile = () => {
+  try {
+    return Object.fromEntries(
+      readFileSync(new URL("../.env.local", import.meta.url), "utf8")
+        .split(/\r?\n/)
+        .filter((l) => l.includes("=") && !l.startsWith("#"))
+        .map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim()]),
+    );
+  } catch {
+    return {};
+  }
+};
+// Local runs report to a throwaway leaderboard game (LEADERBOARD_GAME in .env.local), never to "septica".
+const LB_GAME = envFile().LEADERBOARD_GAME;
+async function rest(path, init = {}) {
+  const env = envFile();
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  const res = await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/${path}`, { ...init, headers: { apikey: key, authorization: `Bearer ${key}` } });
+  return res.status === 204 ? [] : res.json();
+}
+const lbRows = (roomCode) => rest(`hub_leaderboard_rounds?game=eq.${LB_GAME}&room_code=eq.${roomCode}`);
+const lbPlayers = (keys) => rest(`hub_leaderboard?game=eq.${LB_GAME}&player_key=in.(${keys.join(",")})`);
+
+const sleep =(ms) => new Promise((r) => setTimeout(r, ms));
 const roomName = (tag) => `e2e-test-${tag}-${Date.now().toString(36)}`.slice(0, 40);
 
 // Minimal copy of the rules, to check the server's trick winner and scoring.
@@ -174,7 +198,7 @@ async function httpChecks() {
   check(iconsOk, "icons + favicon 200 image/*");
   check((await fetch(`${BASE}/room/ABCDEF`)).status === 200, "GET /septica/room/ABCDEF 200");
   check((await call("/api/rooms/ABCDEF/state", { token: "x" })).status === 404, "unknown room state = 404");
-  if (ORIGIN !== "https://web-septica-game.vercel.app") {
+  if (!LOCAL && ORIGIN !== "https://web-septica-game.vercel.app") {
     const v = await fetch("https://web-septica-game.vercel.app/septica");
     const vhtml = await v.text();
     const vAssets = vhtml.match(/\/septica\/_next\/static\/[^"']+\.js/g) ?? [];
@@ -184,6 +208,7 @@ async function httpChecks() {
 
 async function main() {
   console.log(`E2E against ${BASE}`);
+  if (LOCAL && (!LB_GAME || LB_GAME === "septica")) throw new Error("Set LEADERBOARD_GAME=septica-test in .env.local first: the shared DB holds the real leaderboard.");
   await httpChecks();
 
   console.log("Create, list, join (3 players, password)");
@@ -221,7 +246,24 @@ async function main() {
   let s = all[A.playerId];
   check(s.room.status === "playing" && s.game.turn === A.playerId && s.game.order[0] === A.playerId, "host leads round 1");
   check([A, B, C].every((p) => all[p.playerId].game.hand.length === 4) && s.game.stockCount === 30 - 12, "3 players: 30-card deck, 4 cards each");
-  check((await call(`/api/rooms/${code}/join`, { body: { nickname: "Dan", password: "pw", deviceId: dev.D } })).status === 409, "joining a running deal = 409");
+  console.log("Spectator joins a running deal");
+  const specJoin = await call(`/api/rooms/${code}/join`, { body: { nickname: "Dan", password: "pw", deviceId: dev.D } });
+  check(specJoin.status === 200 && !!specJoin.data.token, "joining a running deal = spectator (200)");
+  const D = { ...specJoin.data, name: "Dan" };
+  const sp = (await call(`/api/rooms/${code}/state`, { token: D.token })).data;
+  check(sp.me?.role === "spectator" && sp.game.hand.length === 0 && sp.game.legal.length === 0, "spectator has no hand and no legal cards");
+  check(!/"(hands|stock|token_hash|device_hash)"/.test(JSON.stringify(sp)) && sp.game.stockCount === 30 - 12, "spectator state leaks nothing private");
+  check(sp.players.length === 3 && sp.spectators.length === 1, "spectator not counted among the players");
+  check((await call(`/api/rooms/${code}/play`, { token: D.token, body: { card: "7S" } })).status === 403, "spectator cannot play (403)");
+  check((await call(`/api/rooms/${code}/ready`, { token: D.token, body: { ready: true } })).status === 403, "spectator cannot ready (403)");
+  check((await call(`/api/rooms/${code}/reorder`, { token: A.token, body: { order: [A.playerId, B.playerId, C.playerId] } })).status === 409, "reorder mid-deal = 409");
+  check((await call(`/api/rooms/${code}/queue`, { token: A.token, body: {} })).status === 409, "player cannot queue (409)");
+  check((await call(`/api/rooms/${code}/queue`, { token: D.token, body: {} })).data.queued === true, "Dan queues for next round");
+  check((await call(`/api/rooms/${code}/queue`, { token: D.token, body: {} })).data.queued === false, "queue toggles off");
+  check((await call(`/api/rooms/${code}/queue`, { token: D.token, body: {} })).data.queued === true, "queue toggles on");
+  const specRejoin = await call(`/api/rooms/${code}/join`, { body: { nickname: "Dan", password: "pw", deviceId: dev.D } });
+  check(specRejoin.status === 200 && specRejoin.data.playerId === D.playerId, "spectator rejoin keeps the seat");
+  D.token = specRejoin.data.token;
 
   console.log("Kick with Ignoră");
   check((await call(`/api/rooms/${code}/kick`, { token: B.token, body: { playerId: C.playerId } })).status === 403, "non-host kick = 403");
@@ -247,11 +289,34 @@ async function main() {
   } else check(d1.all[A.playerId].players.every((p) => p.wins === 0), "draw: nobody gets a win");
   check((await call(`/api/rooms/${code}/play`, { token: A.token, body: { card: "7S" } })).status === 409, "play after the end = 409");
 
-  console.log("New round");
+  console.log("Leaderboard report (local only)");
+  if (LOCAL) {
+    const rows = await lbRows(code);
+    check(rows.length === 1, "round 1 claimed once in hub_leaderboard_rounds");
+    const lb = await lbPlayers(["ana", "bob", "cris"]);
+    check(lb.length === 3 && lb.every((x) => x.games === 1), "ana/bob/cris: games = 1");
+    check(lb.reduce((a, x) => a + x.wins, 0) === (r1.winners.length === 1 ? 1 : 0), "wins counted for the winner only (none on a draw)");
+  } else console.log("  (skipped: needs the DB service key and a local server)");
+
+  console.log("Reorder (host, between rounds)");
+  const ids3 = [A.playerId, B.playerId, C.playerId];
+  const newOrder = [C.playerId, A.playerId, B.playerId];
+  check((await call(`/api/rooms/${code}/reorder`, { token: B.token, body: { order: newOrder } })).status === 403, "non-host reorder = 403");
+  check((await call(`/api/rooms/${code}/reorder`, { token: A.token, body: { order: [A.playerId, B.playerId] } })).status === 400, "incomplete order = 400");
+  check((await call(`/api/rooms/${code}/reorder`, { token: A.token, body: { order: [A.playerId, A.playerId, B.playerId] } })).status === 400, "duplicate in order = 400");
+  check((await call(`/api/rooms/${code}/reorder`, { token: A.token, body: { order: [...ids3, D.playerId] } })).status === 400, "spectator in order = 400");
+  check((await call(`/api/rooms/${code}/reorder`, { token: A.token, body: { order: newOrder } })).status === 200, "host reorders");
+  s = (await call(`/api/rooms/${code}/state`, { token: A.token })).data;
+  check(JSON.stringify(s.players.map((p) => p.id)) === JSON.stringify(newOrder), "players listed in the saved order");
+
+  console.log("New round: Dan is promoted from the queue");
   check((await call(`/api/rooms/${code}/new-round`, { token: B.token, body: {} })).status === 403, "non-host new round = 403");
   check((await call(`/api/rooms/${code}/new-round`, { token: A.token, body: {} })).status === 200, "host new round");
   s = (await call(`/api/rooms/${code}/state`, { token: A.token })).data;
-  check(s.room.status === "playing" && s.room.round === 2 && s.game.turn === s.game.order[1], "round 2, next seat leads");
+  check(s.room.status === "playing" && s.room.round === 2 && s.players.length === 4 && s.spectators.length === 0, "round 2 with 4 players, no spectators");
+  check(JSON.stringify(s.game.order) === JSON.stringify([...newOrder, D.playerId]), "saved order kept, Dan appended last");
+  check(s.game.turn === s.game.order[1], "round 2: next seat leads");
+  check((await call(`/api/rooms/${code}/state`, { token: D.token })).data.game.hand.length === 4, "Dan is a player now: has a hand");
 
   console.log("Leave mid-deal");
   check((await call(`/api/rooms/${code}/leave`, { token: C.token, body: {} })).status === 200, "Cris leaves");
@@ -262,9 +327,8 @@ async function main() {
   console.log("Back to lobby, teams of 2 vs 2");
   check((await call(`/api/rooms/${code}/lobby`, { token: A.token, body: {} })).status === 200, "host back to lobby");
   const C2 = await join("Cris", dev.C);
-  const D = await join("Dan", dev.D);
-  check(!!C2.token && !!D.token, "Cris and Dan join the lobby");
-  check((await call(`/api/rooms/${code}/join`, { body: { nickname: "Eva", password: "pw" } })).status === 409, "5th player = 409");
+  check(!!C2.token, "Cris joins the lobby (Dan is already seated)");
+  check((await call(`/api/rooms/${code}/join`, { body: { nickname: "Eva", password: "pw" } })).status === 409, "5th player in the lobby = 409 (full)");
   check((await call(`/api/rooms/${code}/settings`, { token: A.token, body: { teams: true } })).status === 200, "host turns teams on");
   const team = [A, B, C2, D];
   s = (await call(`/api/rooms/${code}/state`, { token: A.token })).data;
@@ -329,6 +393,10 @@ async function main() {
 
 /** Safety net: delete rooms left behind by a failed run, straight in the DB (service key from .env.local). */
 async function cleanup() {
+  if (LOCAL && LB_GAME && LB_GAME !== "septica") {
+    await rest(`hub_leaderboard?game=eq.${LB_GAME}`, { method: "DELETE" });
+    await rest(`hub_leaderboard_rounds?game=eq.${LB_GAME}`, { method: "DELETE" });
+  }
   if (created.size === 0) return;
   try {
     const env = Object.fromEntries(
