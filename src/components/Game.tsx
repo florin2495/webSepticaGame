@@ -40,8 +40,8 @@ const SEAT_CELL: Record<SeatPos, string> = {
 /** Where a card lands on the felt (% of its width / height), by the seat of whoever played it. */
 const FELT_SPOT: Record<SeatPos, [number, number]> = {
   top: [50, 22],
-  left: [22, 50],
-  right: [78, 50],
+  left: [19, 50],
+  right: [81, 50],
   bottom: [50, 78],
 };
 
@@ -271,7 +271,7 @@ function TrickTable({
               style={{ left: `${x}%`, top: `${y}%` }}
               title={nick(p.playerId)}
             >
-              <PlayingCard card={p.card} size="sm" className={`!h-12 !w-9 ${i === hi ? "ring-4 ring-amber-400" : ""}`} />
+              <PlayingCard card={p.card} size="sm" className={`${seatCount === 2 ? "!h-12 !w-9" : "!h-11 !w-8"} ${i === hi ? "ring-2 ring-amber-400" : ""}`} />
             </span>
           );
         })
