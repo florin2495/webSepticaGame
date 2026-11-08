@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Septica – mock layout jucători</title>
+<style>
+:root{--bg:#f4f4f5;--card:#fff;--bd:#d4d4d8;--tx:#18181b;--mut:#71717a;--ind:#6366f1;--amb:#fbbf24;--t0:#fee2e2;--t0b:#fca5a5;--t1:#dbeafe;--t1b:#93c5fd}
+@media (prefers-color-scheme:dark){:root{--bg:#09090b;--card:#18181b;--bd:#3f3f46;--tx:#f4f4f5;--mut:#a1a1aa;--t0:#450a0a;--t0b:#991b1b;--t1:#172554;--t1b:#1e40af}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px system-ui,sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:430px;margin:0 auto;padding:12px 16px 40px}
+h1{font-size:16px;margin:4px 0 8px}
+.ctl{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.ctl button{border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;min-height:34px}
+.ctl button.on{background:var(--ind);border-color:var(--ind);color:#fff}
+.lbl{font-size:11px;text-transform:uppercase;color:var(--mut);margin-top:8px}
+.panel{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:10px;margin:10px 0}
+.panel h2{font-size:13px;margin:0 0 6px;color:var(--mut)}
+.note{font-size:12px;color:var(--mut);margin:4px 0}
+.legend{font-size:11px;color:var(--mut);display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}
+.score{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;font-size:12px;margin-bottom:8px}
+.score span{border:1px solid var(--bd);border-radius:999px;padding:3px 10px}
+
+/* player chip */
+.p{display:flex;flex-direction:column;align-items:center;gap:2px;border:1px solid var(--bd);border-radius:12px;padding:6px 8px;background:var(--card);min-width:0;position:relative;text-align:center}
+.p.t0{background:var(--t0);border-color:var(--t0b)}.p.t1{background:var(--t1);border-color:var(--t1b)}
+.p.turn{box-shadow:0 0 0 3px var(--ind)}
+.p .nm{font-weight:600;font-size:13px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p .tag{display:flex;gap:3px;flex-wrap:wrap;justify-content:center;min-height:16px}
+.b{font-size:9px;text-transform:uppercase;font-weight:700;border-radius:999px;padding:1px 6px;white-space:nowrap}
+.b.lead{background:var(--amb);color:#451a03}
+.b.next{background:var(--ind);color:#fff}
+.b.part{background:transparent;border:1px solid var(--mut);color:var(--mut)}
+.b.me{background:var(--tx);color:var(--bg)}
+.b.pos{background:var(--bd);color:var(--tx)}
+.hand{display:flex;height:34px;align-items:center}
+.hand i{display:block;width:22px;height:32px;border-radius:4px;border:1px solid #fff;background:repeating-linear-gradient(45deg,#4338ca,#4338ca 3px,#6366f1 3px,#6366f1 6px);margin-left:-11px}
+.hand i:first-child{margin-left:0}
+.card{width:34px;height:50px;border-radius:6px;background:#fff;color:#111;border:1px solid #a1a1aa;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex:none}
+.card.red{color:#dc2626}.card.win{box-shadow:0 0 0 3px var(--amb)}
+.me-hand{display:flex;justify-content:center;gap:5px;margin-top:8px}
+.me-hand .card{width:56px;height:82px;font-size:22px}
+
+/* VARIANT A: table cross */
+.cross{display:grid;grid-template-columns:1fr 1.15fr 1fr;grid-template-rows:auto auto auto;gap:6px;align-items:center}
+.cross .top{grid-column:2;grid-row:1}
+.cross .left{grid-column:1;grid-row:2}
+.cross .right{grid-column:3;grid-row:2}
+.cross .bottom{grid-column:2;grid-row:3}
+.felt{grid-column:2;grid-row:2;aspect-ratio:1;border-radius:18px;background:#166534;position:relative;color:#fff;min-height:110px}
+.felt .c{position:absolute;transform:translate(-50%,-50%)}
+.felt .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;opacity:.8}
+.felt .c .card{width:30px;height:44px;font-size:13px}
+.arrow{font-size:18px;color:var(--ind);line-height:1}
+
+/* VARIANT B: strip */
+.strip{display:flex;align-items:stretch;gap:0;overflow-x:auto;padding:4px 0}
+.strip .step{display:flex;align-items:center;flex:1 1 0;min-width:0}
+.strip .p{flex:1;min-width:64px}
+.strip .ar{color:var(--mut);padding:0 2px;font-size:14px}
+.strip .ar.wrap{color:var(--amb)}
+.trickrow{display:flex;gap:8px;justify-content:center;margin:10px 0 4px;min-height:70px;align-items:flex-end}
+.trickrow .tc{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;color:var(--mut)}
+.trickrow .card{width:44px;height:64px;font-size:17px}
+
+/* VARIANT C: hybrid */
+.hyb{display:grid;grid-template-columns:1fr auto 1fr;grid-template-rows:auto auto;gap:6px;align-items:center}
+.hyb .top{grid-column:1/4;grid-row:1;justify-self:center;width:46%}
+.hyb .left{grid-column:1;grid-row:2}
+.hyb .right{grid-column:3;grid-row:2}
+.hyb .mid{grid-column:2;grid-row:2;display:flex;flex-direction:column;align-items:center;gap:4px;padding:0 2px}
+.mid .cards{display:flex;flex-wrap:wrap;justify-content:center;gap:3px;max-width:130px}
+.mid .cards .card{width:30px;height:44px;font-size:13px}
+.orderbar{display:flex;justify-content:center;align-items:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--bd)}
+.orderbar .o{display:flex;align-items:center;gap:3px;border:1px solid var(--bd);border-radius:999px;padding:2px 8px}
+.orderbar .o.lead{background:var(--amb);color:#451a03;border-color:var(--amb);font-weight:700}
+.orderbar .o.turn{box-shadow:0 0 0 2px var(--ind)}
+.orderbar .o.mine{font-weight:700}
+.status{text-align:center;font-weight:600;font-size:13px;margin:8px 0 0;color:var(--ind)}
+@media (prefers-color-scheme:dark){.status{color:#a5b4fc}}
+.hint{border:1px solid var(--bd);border-radius:12px;padding:8px 10px;font-size:12px;background:var(--card);margin:6px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Septica – zona jucătorilor (mock)</h1>
+  <p class="note">Mock static, nimic nu e legat de joc. Poți schimba nr. de jucători, modul pe echipe, cine a început și al cui e rândul. Telefon portret ~390 px.</p>
+
+  <div class="lbl">Jucători</div>
+  <div class="ctl" id="cN"></div>
+  <div class="lbl">Mod</div>
+  <div class="ctl" id="cT"></div>
+  <div class="lbl">Cine a început mâna (leader)</div>
+  <div class="ctl" id="cL"></div>
+  <div class="lbl">Al cui e rândul</div>
+  <div class="ctl" id="cTurn"></div>
+  <div class="lbl">Eu sunt (jucătorul de jos)</div>
+  <div class="ctl" id="cMe"></div>
+
+  <div class="legend">
+    <span><span class="b lead">a început</span> leader-ul mâinii</span>
+    <span><span class="b next">urmează</span> următorul la rând</span>
+    <span><span class="b part">partener</span> coechipier</span>
+    <span><span class="b pos">1·2·3·4</span> ordinea de joc</span>
+  </div>
+
+  <div class="panel"><h2>VARIANTA A – Masă cu 4 locuri</h2><div id="A"></div></div>
+  <div class="panel"><h2>VARIANTA B – Bandă în ordinea de joc</h2><div id="B"></div></div>
+  <div class="panel"><h2>VARIANTA C – Hibrid (recomandat): locuri în jurul mesei + bară de ordine</h2><div id="C"></div></div>
+</div>
+
+<script>
+const NAMES=["Ana","Bogdan","Cami","Dan"];
+const S={n:4,teams:false,lead:0,turn:1,me:0};
+// order = play order (indices 0..n-1). Team = idx%2 (partener = opus la masă = +2).
+const $=id=>document.getElementById(id);
+const tm=i=>S.teams&&S.n===4?i%2:null;
+const TN=["Roșii","Albaștri"];
+const SUITS=[["A","red"],["10",""],["K","red"],["7",""],["9",""],["8","red"]];
+function ctl(id,items,cur,fn){const el=$(id);el.innerHTML="";items.forEach(([v,l])=>{const b=document.createElement("button");b.textContent=l;if(v===cur)b.className="on";b.onclick=()=>fn(v);el.appendChild(b)})}
+function ord(i){return (i-S.me+S.n)%S.n} // 0 = me, 1 = next, ...
+function seatOf(i){ // returns 'bottom','left','top','right'
+  const k=ord(i);
+  if(k===0)return"bottom";
+  if(S.n===2)return"top";
+  if(S.n===3)return k===1?"left":"right";
+  return k===1?"left":k===2?"top":"right";
+}
+// trick: from leader, up to turn (exclusive) plays a card
+function trick(){const out=[];let i=S.lead;let g=0;while(i!==S.turn&&g<S.n){out.push(i);i=(i+1)%S.n;g++}return out}
+function cardFor(k){const s=SUITS[(k*2+S.lead)%SUITS.length];return `<div class="card ${s[1]}">${s[0]}</div>`}
+function chip(i,opts={}){
+  const t=tm(i),cls=["p"];if(t!==null)cls.push("t"+t);if(i===S.turn)cls.push("turn");
+  const isMe=i===S.me,isLead=i===S.lead&&trick().length>0,isNext=i===S.turn;
+  const partner=S.teams&&S.n===4&&!isMe&&t===tm(S.me);
+  const tags=[];
+  if(isMe)tags.push('<span class="b me">tu</span>');
+  if(isLead)tags.push('<span class="b lead">a început</span>');
+  if(isNext&&!isMe)tags.push('<span class="b next">urmează</span>');
+  if(isNext&&isMe)tags.push('<span class="b next">rândul tău</span>');
+  if(partner)tags.push('<span class="b part">partener</span>');
+  const pos=opts.pos?`<span class="b pos">${ord(i)+1}</span>`:"";
+  const hand=opts.hand===false?"":`<div class="hand">${Array.from({length:Math.min(4,3)},()=>"<i></i>").join("")}</div>`;
+  return `<div class="${cls.join(" ")}"><div class="nm">${isNext?"▶ ":""}${NAMES[i]}</div><div class="tag">${pos}${tags.join("")}</div>${hand}</div>`;
+}
+function score(){const el=S.teams&&S.n===4?TN.map((n,i)=>`<span>${n} (${NAMES.filter((_,j)=>j%2===i).join(" + ")}): <b>${i?3:5}</b> puncte</span>`):Array.from({length:S.n},(_,i)=>`<span>${NAMES[i]}: <b>${(i*2+1)%6}</b></span>`);return `<div class="score">${el.join("")}</div>`}
+function status(){const t=trick();const me=S.turn===S.me;const who=NAMES[S.turn];
+  const start=t.length===0;
+  return `<div class="status">${me?(start?"Începi tu mâna: pune orice carte.":"E rândul tău. Taie sau pune altă carte."):(start?`${who} începe mâna…`:`Așteaptă pe ${who}…`)}</div>`}
+function myHand(){return `<div class="me-hand">${[0,1,2,3].map(k=>cardFor(k+3)).join("")}</div>`}
+
+function renderA(){
+  const t=trick();
+  const seats={};for(let i=0;i<S.n;i++)seats[seatOf(i)]=i;
+  const pos={bottom:[50,82],top:[50,18],left:[20,50],right:[80,50]};
+  const felt=`<div class="felt">${t.length===0?'<div class="empty">Masa e goală</div>':t.map((i,k)=>{const p=pos[seatOf(i)];return `<div class="c" style="left:${p[0]}%;top:${p[1]}%">${cardFor(k)}</div>`}).join("")}</div>`;
+  let h=score()+'<div class="cross">';
+  ["top","left","right"].forEach(s=>{if(seats[s]!==undefined)h+=`<div class="${s}">${chip(seats[s],{pos:true})}</div>`});
+  h+=felt;
+  h+=`<div class="bottom">${chip(S.me,{pos:true,hand:false})}</div></div>`;
+  h+=status()+myHand()+'<p class="note">Cartea fiecăruia se pune în fața locului lui, așa se vede cine a pus ce. Ordinea = în sensul acelor de ceasornic (stânga → sus → dreapta).</p>';
+  $("A").innerHTML=h;
+}
+function renderB(){
+  // strip in play order starting from the leader (or turn if table empty)
+  const t=trick();const start=t.length?S.lead:S.turn;
+  const seq=Array.from({length:S.n},(_,k)=>(start+k)%S.n);
+  let strip='<div class="strip">';
+  seq.forEach((i,k)=>{strip+=`<div class="step">${chip(i,{pos:false,hand:true})}${k<S.n-1?'<span class="ar">→</span>':'<span class="ar wrap">↩</span>'}</div>`});
+  strip+="</div>";
+  const row=t.length?`<div class="trickrow">${t.map((i,k)=>`<div class="tc">${cardFor(k)}<span>${NAMES[i]}</span></div>`).join("")}</div>`:'<div class="trickrow"><span class="note">Masa e goală</span></div>';
+  $("B").innerHTML=score()+strip+row+status()+myHand()+'<p class="note">Toți jucătorii într-un singur rând, în ordinea de joc, începând de la cine a pus prima carte. Cu 4 jucători chipurile devin înguste pe 390 px.</p>';
+}
+function renderC(){
+  const t=trick();
+  const seats={};for(let i=0;i<S.n;i++)seats[seatOf(i)]=i;
+  const mid=`<div class="mid"><div class="cards">${t.length===0?'<span class="note">Masa e goală</span>':t.map((i,k)=>`<div class="tc" style="display:flex;flex-direction:column;align-items:center">${cardFor(k)}<span style="font-size:9px;color:var(--mut)">${NAMES[i]}</span></div>`).join("")}</div></div>`;
+  let h=score()+'<div class="hyb">';
+  if(seats.top!==undefined)h+=`<div class="top">${chip(seats.top)}</div>`;
+  if(S.n===2){h+=`<div class="left"></div>`}
+  else{ if(seats.left!==undefined)h+=`<div class="left">${chip(seats.left)}</div>`;}
+  h+=mid;
+  if(seats.right!==undefined)h+=`<div class="right">${chip(seats.right)}</div>`;
+  h+="</div>";
+  // order bar, starting at leader
+  const start=t.length?S.lead:S.turn;
+  const seq=Array.from({length:S.n},(_,k)=>(start+k)%S.n);
+  h+='<div class="orderbar"><b>Ordine:</b>'+seq.map((i,k)=>`<span class="o ${i===S.lead&&t.length?"lead":""} ${i===S.turn?"turn":""} ${i===S.me?"mine":""}">${k+1}. ${NAMES[i]}${i===S.lead&&t.length?" 🏁":""}${i===S.turn?" ▶":""}</span>`+(k<S.n-1?"→":"")).join("")+"</div>";
+  h+=status()+myHand()+'<p class="note">Locurile arată mâna adversarilor și cine e partener; masa din mijloc păstrează cărțile jucate în ordinea în care au căzut; bara de jos dă ordinea explicită (🏁 = a început, ▶ = urmează). Cu 2 jucători: doar „sus".</p>';
+  $("C").innerHTML=h;
+}
+function render(){
+  ctl("cN",[[2,"2"],[3,"3"],[4,"4"]],S.n,v=>{S.n=v;if(v!==4)S.teams=false;S.lead%=v;S.turn%=v;S.me%=v;render()});
+  ctl("cT",[[false,"Fiecare pentru el"],[true,"Pe echipe (doar 4)"]],S.teams,v=>{if(v&&S.n!==4){S.n=4}S.teams=v;render()});
+  const ids=Array.from({length:S.n},(_,i)=>[i,NAMES[i]]);
+  ctl("cL",ids,S.lead,v=>{S.lead=v;render()});
+  ctl("cTurn",ids,S.turn,v=>{S.turn=v;render()});
+  ctl("cMe",ids,S.me,v=>{S.me=v;render()});
+  renderA();renderB();renderC();
+}
+render();
+</script>
+</body>
+</html>
