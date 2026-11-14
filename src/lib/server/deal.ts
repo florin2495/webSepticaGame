@@ -5,8 +5,8 @@ import { db, type RoomRow, T } from "./db";
 import { fail } from "./http";
 import { listPlayers, listSpectators, saveRoom } from "./room";
 
-/** Deals round `round` to everyone in the room (host only, checked by the caller). */
-export async function startDeal(room: RoomRow, round: number, requireReady: boolean): Promise<void> {
+/** Deals round `round` to everyone in the room (host only, checked by the caller). `by` = the host's player id. */
+export async function startDeal(room: RoomRow, round: number, requireReady: boolean, by: string): Promise<void> {
   const players = await listPlayers(room.id);
   if (players.length < MIN_PLAYERS) fail(409, `Ai nevoie de cel puțin ${MIN_PLAYERS} jucători.`);
   if (players.length > MAX_PLAYERS) fail(409, `Maxim ${MAX_PLAYERS} jucători.`);
@@ -22,7 +22,7 @@ export async function startDeal(room: RoomRow, round: number, requireReady: bool
   await saveRoom(room, { status: "playing", round, deal, result: null });
   const { error } = await db().from(T.players).update({ kick_requested_at: null }).eq("room_id", room.id);
   if (error) throw error;
-  await notifyRoom(room.id, "deal_started");
+  await notifyRoom(room.id, "deal_started", room.version + 1, by);
 }
 
 /** Alternating teams in join order, for players without one (teams switched on / player joined). */

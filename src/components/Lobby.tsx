@@ -8,10 +8,20 @@ import { KickBadge, OfflineBadge } from "./KickBadge";
 import { Button, Card, ErrorText, Toggle } from "./ui";
 import { TEAM_NAMES, TEAM_STYLES, useAction } from "./useAction";
 
-export function Lobby({ state, token, refresh }: { state: RoomState; token: string; refresh: () => Promise<void> }) {
+export function Lobby({
+  state,
+  token,
+  refresh,
+  applyState,
+}: {
+  state: RoomState;
+  token: string;
+  refresh: () => Promise<void>;
+  applyState: (state: RoomState) => void;
+}) {
   const { room, players, me } = state;
   const isHost = room.hostPlayerId === me.id;
-  const { busy, error, run } = useAction(room.code, token, refresh);
+  const { busy, error, run } = useAction(room.code, token, refresh, applyState);
 
   const allReady = players.every((p) => p.ready);
   const teamIssue = teamProblem(players, room.teams);

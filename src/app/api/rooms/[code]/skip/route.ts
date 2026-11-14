@@ -12,7 +12,6 @@ export async function POST(req: Request, ctx: RouteContext<"/api/rooms/[code]/sk
     requireStatus(room, "playing");
     if (!room.deal) fail(409, "Nu se joacă acum.");
     const turn = room.deal.turn;
-    await applyMove(room, (deal) => autoMove(deal, turn), "turn_skipped");
-    return { ok: true };
+    return await applyMove(room, (deal) => autoMove(deal, turn), "turn_skipped", player);
   });
 }

@@ -1,10 +1,20 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { api } from "@/lib/client/api";
+import { actionsInFlight, api } from "@/lib/client/api";
+import type { RoomState } from "@/lib/types";
 
-/** POSTs a room action, then refreshes state. Tracks which action is running and the last error. */
-export function useAction(code: string, token: string, refresh: () => Promise<void>) {
+/**
+ * POSTs a room action, then refreshes state. Tracks which action is running and the last error.
+ * When the endpoint answers with the new RoomState and `applyState` is given, that state is applied directly
+ * and no extra GET is made.
+ */
+export function useAction(
+  code: string,
+  token: string,
+  refresh: () => Promise<void>,
+  applyState?: (state: RoomState) => void,
+) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
 
@@ -12,16 +22,23 @@ export function useAction(code: string, token: string, refresh: () => Promise<vo
     async (action: string, body: unknown = {}) => {
       setBusy(action);
       setError("");
+      let applied = false;
+      actionsInFlight.count++;
       try {
-        await api(`/api/rooms/${code}/${action}`, { token, body });
+        const res = await api<Partial<RoomState>>(`/api/rooms/${code}/${action}`, { token, body });
+        if (applyState && res.room && res.me) {
+          applyState(res as RoomState);
+          applied = true;
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Eroare.");
       } finally {
-        await refresh();
+        actionsInFlight.count--;
+        if (!applied) await refresh();
         setBusy(null);
       }
     },
-    [code, token, refresh],
+    [code, token, refresh, applyState],
   );
 
   return { busy, error, run, setError };

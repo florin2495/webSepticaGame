@@ -7,7 +7,6 @@ export async function POST(req: Request, ctx: RouteContext<"/api/rooms/[code]/le
   return handle(async () => {
     const { code } = await ctx.params;
     const { room, player } = await requireMember(req, code);
-    await applyMove(room, (deal) => letGo(deal, player.id), "trick_let_go");
-    return { ok: true };
+    return await applyMove(room, (deal) => letGo(deal, player.id), "trick_let_go", player);
   });
 }

@@ -160,7 +160,12 @@ export function dealResult(deal: Deal): RoundResult {
  * Applies a move to the running deal and saves it. When the deal is over the round finishes:
  * the result is stored and the winners' (single winning side only - a draw gives nothing) wins go up.
  */
-export async function applyMove(room: RoomRow, move: (deal: Deal) => Deal, reason: string): Promise<void> {
+export async function applyMove(
+  room: RoomRow,
+  move: (deal: Deal) => Deal,
+  reason: string,
+  viewer: PlayerRow,
+): Promise<RoomState> {
   if (room.status !== "playing" || !room.deal) fail(409, "Nu se joacă acum.");
   let next: Deal;
   try {
@@ -169,10 +174,12 @@ export async function applyMove(room: RoomRow, move: (deal: Deal) => Deal, reaso
     if (err instanceof RuleError) fail(409, err.message);
     throw err;
   }
+  const version = room.version + 1;
   if (!isDealOver(next)) {
     await saveRoom(room, { deal: next });
-    await notifyRoom(room.id, reason);
-    return;
+    // The broadcast and the caller's fresh state go out together; the caller applies the returned state directly.
+    const [state] = await Promise.all([buildState({ ...room, deal: next, version }, viewer), notifyRoom(room.id, reason, version, viewer.id)]);
+    return state;
   }
   const result = dealResult(next);
   await saveRoom(room, { deal: next, status: "finished", result });
@@ -188,7 +195,16 @@ export async function applyMove(room: RoomRow, move: (deal: Deal) => Deal, reaso
     room.round,
     players.filter((x) => next.order.includes(x.id)).map((x) => ({ nickname: x.nickname, won: winners.includes(x.id) })),
   );
-  await notifyRoom(room.id, "round_finished");
+  const [state] = await Promise.all([
+    buildState({ ...room, deal: next, status: "finished", result, version }, viewer),
+    notifyRoom(room.id, "round_finished", version, viewer.id),
+  ]);
+  return state;
+}
+
+/** Fresh state for the caller right after an action, so the client needs no follow-up /state request. */
+export async function stateAfterAction(room: RoomRow, me: PlayerRow): Promise<RoomState> {
+  return buildState(await getRoomByCode(room.code), me);
 }
 
 const toPublic = (p: PlayerRow, now: number): PublicPlayer => ({
@@ -244,6 +260,7 @@ export async function buildState(room: RoomRow, me: PlayerRow): Promise<RoomStat
       teams: room.teams,
       status: room.status,
       round: room.round,
+      version: room.version,
       hasPassword: room.password_hash !== null,
       hostPlayerId: room.host_player_id,
     },

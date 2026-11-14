@@ -30,27 +30,44 @@ function seatPos(k: number, n: number): SeatPos {
   return k === 1 ? "left" : k === 2 ? "top" : "right";
 }
 
-const SEAT_CELL: Record<SeatPos, string> = {
-  top: "col-start-2 row-start-1",
-  left: "col-start-1 row-start-2",
-  right: "col-start-3 row-start-2",
-  bottom: "col-start-2 row-start-3",
-};
-
 /** Where a card lands on the felt (% of its width / height), by the seat of whoever played it. */
 const FELT_SPOT: Record<SeatPos, [number, number]> = {
-  top: [50, 22],
-  left: [19, 50],
-  right: [81, 50],
-  bottom: [50, 78],
+  top: [50, 30],
+  left: [22, 30],
+  right: [78, 30],
+  bottom: [50, 72],
 };
 
-export function Game({ state, token, refresh }: { state: RoomState; token: string; refresh: () => Promise<void> }) {
+/** Red dot in the corner of a player's frame: this player starts (leads) the trick. */
+function LeaderDot() {
+  return (
+    <span
+      role="img"
+      aria-label="A început mâna"
+      title="A început mâna"
+      className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-red-500 shadow-sm"
+    />
+  );
+}
+
+export function Game({
+  state,
+  token,
+  refresh,
+  applyState,
+}: {
+  state: RoomState;
+  token: string;
+  refresh: () => Promise<void>;
+  applyState: (state: RoomState) => void;
+}) {
   const { room, players, me, game, result } = state;
   const isHost = room.hostPlayerId === me.id;
-  const { busy, error, run } = useAction(room.code, token, refresh);
+  const { busy, error, run } = useAction(room.code, token, refresh, applyState);
   const [confirmPlay] = useBoolPref(PREF_CONFIRM_PLAY, false);
   const [selected, setSelected] = useState<CardT | null>(null);
+  // The card just tapped: shown on the felt at once, before the server answers.
+  const [pending, setPending] = useState<CardT | null>(null);
 
   const byId = new Map([...players, ...state.spectators].map((p) => [p.id, p]));
   const nick = (id: string | null | undefined) => (id ? (byId.get(id)?.nickname ?? "cineva") : "cineva");
@@ -73,29 +90,55 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
       setSelected(pick === card ? null : card);
       return;
     }
-    void run("play", { card });
+    play(card);
   }
 
   function play(card: CardT) {
     setSelected(null);
-    void run("play", { card });
+    setPending(card);
+    void run("play", { card }).finally(() => setPending(null));
   }
 
   const leadRank = game.trick[0] ? rankOf(game.trick[0].card) : null;
   const status = statusText(game, me.id, nick, room.status === "finished");
 
-  // Table seats: the viewer is always at the bottom, the next player to the left, the third on top (the partner
-  // in teams), the previous one to the right. A spectator watches from seat 0.
+  // Table seats: the viewer is always at the bottom (their cards sit right under the table); the others are in a
+  // row on top in play order, left to right (next player first). A spectator watches from seat 0.
   const isSpectator = me.role === "spectator";
   const anchor = isSpectator ? game.order[0] : me.id;
   const seatCount = game.order.length;
   const anchorIdx = Math.max(game.order.indexOf(anchor), 0);
-  const seats: Partial<Record<SeatPos, string>> = {};
-  game.order.forEach((id, i) => {
-    seats[seatPos((i - anchorIdx + seatCount) % seatCount, seatCount)] = id;
-  });
+  const ring = Array.from({ length: seatCount }, (_, k) => game.order[(anchorIdx + k) % seatCount]);
+  const others = ring.slice(1);
 
   const finished = room.status === "finished";
+  const hand = pending ? game.hand.filter((c) => c !== pending) : game.hand;
+
+  const renderSeat = (id: string) => (
+    <Seat
+      player={byId.get(id)}
+      seatNo={game.order.indexOf(id) + 1}
+      count={game.handCounts[id] ?? 0}
+      isTurn={game.turn === id}
+      isLeader={game.leader === id && !finished}
+      partner={game.teams && byId.get(id)?.team === byId.get(anchor)?.team}
+      canSkip={isHost && id !== me.id && game.turn === id && room.status === "playing"}
+      busy={busy !== null}
+      canKick={isHost && id !== me.id}
+      onKick={() => {
+        const target = byId.get(id);
+        if (!target) return;
+        const msg =
+          room.status === "playing"
+            ? `Scoți jucătorul ${target.nickname} din cameră? Are 10 secunde să refuze; dacă nu, runda se anulează pentru toți.`
+            : `Scoți jucătorul ${target.nickname} din cameră?`;
+        if (window.confirm(msg)) void run("kick", { playerId: id });
+      }}
+      onSkip={() => {
+        if (window.confirm(`Joci în locul lui ${nick(id)}? (cartea cea mai mică, sau lasă mâna)`)) void run("skip");
+      }}
+    />
+  );
 
   return (
     <>
@@ -116,42 +159,63 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
           <span>Mâna {game.tricksPlayed + (game.trick.length > 0 ? 1 : 0)}</span>
         </div>
 
-        <div className="grid grid-cols-[1fr_1.15fr_1fr] items-center gap-1.5">
-          {(["top", "left", "right", "bottom"] as const).map((pos) => {
-            const id = seats[pos];
-            if (!id) return null;
-            const isMe = id === me.id;
-            return (
-              <div key={pos} className={SEAT_CELL[pos]}>
-                <Seat
-                  player={byId.get(id)}
-                  seatNo={game.order.indexOf(id) + 1}
-                  count={game.handCounts[id] ?? 0}
-                  isMe={isMe}
-                  isTurn={game.turn === id}
-                  isLeader={game.leader === id && game.trick.length > 0}
-                  partner={game.teams && !isMe && byId.get(id)?.team === byId.get(anchor)?.team}
-                  canSkip={isHost && !isMe && game.turn === id && room.status === "playing"}
-                  busy={busy !== null}
-                  canKick={isHost && !isMe}
-                  onKick={() => {
-                    const target = byId.get(id);
-                    if (!target) return;
-                    const msg =
-                      room.status === "playing"
-                        ? `Scoți jucătorul ${target.nickname} din cameră? Are 10 secunde să refuze; dacă nu, runda se anulează pentru toți.`
-                        : `Scoți jucătorul ${target.nickname} din cameră?`;
-                    if (window.confirm(msg)) void run("kick", { playerId: id });
-                  }}
-                  onSkip={() => {
-                    if (window.confirm(`Joci în locul lui ${nick(id)}? (cartea cea mai mică, sau lasă mâna)`)) void run("skip");
-                  }}
-                />
-              </div>
-            );
-          })}
-          <TrickTable game={game} anchorIdx={anchorIdx} seatCount={seatCount} nick={nick} />
+        <div
+          className="mx-auto grid w-full gap-1.5"
+          style={{ gridTemplateColumns: `repeat(${others.length}, minmax(0, 1fr))`, maxWidth: others.length === 1 ? "60%" : undefined }}
+        >
+          {others.map((id) => (
+            <div key={id}>{renderSeat(id)}</div>
+          ))}
         </div>
+        <TrickTable
+          game={game}
+          anchorIdx={anchorIdx}
+          seatCount={seatCount}
+          nick={nick}
+          pending={pending ? { playerId: me.id, card: pending } : null}
+        />
+        {isSpectator ? (
+          <div className="mx-auto w-3/5">{renderSeat(ring[0])}</div>
+        ) : (
+          !finished && (
+            <div
+              className={`relative rounded-xl border p-1.5 ${
+                me.team === 0 || me.team === 1 ? TEAM_STYLES[me.team] : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
+              } ${myTurn ? "ring-2 ring-indigo-500" : ""}`}
+            >
+              {game.leader === me.id && <LeaderDot />}
+              {hand.length === 0 ? (
+                <p className="py-4 text-center text-sm text-zinc-500">Nu mai ai cărți.</p>
+              ) : (
+                <div className="flex justify-center gap-1 sm:gap-2">
+                  {hand.map((c) => {
+                    const legal = game.legal.includes(c);
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => tapCard(c)}
+                        disabled={!legal || busy !== null}
+                        className={`rounded-lg transition-transform ${legal ? "enabled:hover:-translate-y-1" : myTurn ? "opacity-40" : ""} ${
+                          pick === c ? "-translate-y-3 ring-4 ring-indigo-500" : ""
+                        }`}
+                        aria-label={`Joacă ${c}`}
+                      >
+                        <PlayingCard card={c} size="lg" />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {confirmPlay && pick && (
+                <Button className="mt-3 w-full" disabled={busy !== null} onClick={() => play(pick)}>
+                  Joacă {rankOf(pick)}
+                </Button>
+              )}
+            </div>
+          )
+        )}
+        <ErrorText>{error}</ErrorText>
 
         {leadRank && (
           <p className="text-center text-xs text-zinc-500">
@@ -170,46 +234,6 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
           </Button>
         )}
       </Card>
-
-      {!finished && !isSpectator && (
-      <Card className={myTurn ? "ring-2 ring-indigo-500" : ""}>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="font-bold">Cărțile tale</h2>
-          {game.teams && me.team !== null && <span className="text-xs text-zinc-500">{TEAM_NAMES[me.team]}</span>}
-        </div>
-        {game.hand.length === 0 ? (
-          <p className="py-4 text-center text-sm text-zinc-500">Nu mai ai cărți.</p>
-        ) : (
-          <div className="flex justify-center gap-1.5 sm:gap-2">
-            {game.hand.map((c) => {
-              const legal = game.legal.includes(c);
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => tapCard(c)}
-                  disabled={!legal || busy !== null}
-                  className={`rounded-lg transition-transform ${legal ? "enabled:hover:-translate-y-1" : myTurn ? "opacity-40" : ""} ${
-                    pick === c ? "-translate-y-3 ring-4 ring-indigo-500" : ""
-                  }`}
-                  aria-label={`Joacă ${c}`}
-                >
-                  <PlayingCard card={c} size="lg" />
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {confirmPlay && pick && (
-          <Button className="mt-3 w-full" disabled={busy !== null} onClick={() => play(pick)}>
-            Joacă {rankOf(pick)}
-          </Button>
-        )}
-        <div className="mt-2">
-          <ErrorText>{error}</ErrorText>
-        </div>
-      </Card>
-      )}
 
       {result === null && game.lastTrick && game.trick.length > 0 && (
         <p className="text-center text-xs text-zinc-500">
@@ -240,14 +264,18 @@ function TrickTable({
   anchorIdx,
   seatCount,
   nick,
+  pending,
 }: {
   game: GameView;
   anchorIdx: number;
   seatCount: number;
   nick: (id: string | null) => string;
+  /** My card, tapped but not yet confirmed by the server. */
+  pending: Play | null;
 }) {
-  const showingLast = game.trick.length === 0 && game.lastTrick !== null;
-  const plays = showingLast ? game.lastTrick!.plays : game.trick;
+  const live = pending && !game.trick.some((p) => p.card === pending.card) ? [...game.trick, pending] : game.trick;
+  const showingLast = live.length === 0 && game.lastTrick !== null;
+  const plays = showingLast ? game.lastTrick!.plays : live;
   const hi = holderIndex(plays);
   const spot = (id: string): [number, number] => {
     const k = (game.order.indexOf(id) - anchorIdx + seatCount) % seatCount;
@@ -255,9 +283,7 @@ function TrickTable({
   };
   return (
     <div
-      className={`relative row-start-2 min-h-32 rounded-2xl bg-emerald-800 shadow-inner ${
-        seatCount === 2 ? "col-span-3 col-start-1 h-36" : "col-start-2 aspect-square"
-      }`}
+      className="relative h-44 w-full rounded-2xl bg-emerald-800 shadow-inner"
     >
       {plays.length === 0 ? (
         <span className="absolute inset-0 flex items-center justify-center text-xs text-emerald-100/80">Masa e goală</span>
@@ -271,7 +297,7 @@ function TrickTable({
               style={{ left: `${x}%`, top: `${y}%` }}
               title={nick(p.playerId)}
             >
-              <PlayingCard card={p.card} size="sm" className={`${seatCount === 2 ? "!h-12 !w-9" : "!h-11 !w-8"} ${i === hi ? "ring-2 ring-amber-400" : ""}`} />
+              <PlayingCard card={p.card} size="sm" className={`!h-12 !w-9 ${i === hi ? "ring-2 ring-amber-400" : ""}`} />
             </span>
           );
         })
@@ -289,7 +315,6 @@ function Seat({
   player,
   seatNo,
   count,
-  isMe,
   isTurn,
   isLeader,
   partner,
@@ -302,7 +327,6 @@ function Seat({
   player: PublicPlayer | undefined;
   seatNo: number;
   count: number;
-  isMe: boolean;
   isTurn: boolean;
   isLeader: boolean;
   partner: boolean;
@@ -315,11 +339,12 @@ function Seat({
   const team = player?.team;
   return (
     <div
-      className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-center ${
+      className={`relative flex flex-col items-center gap-1 rounded-xl border p-2 text-center ${
         team === 0 || team === 1 ? TEAM_STYLES[team] : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
       } ${isTurn ? "ring-2 ring-indigo-500" : ""}`}
     >
-      <span className="max-w-full truncate text-sm font-semibold">
+      {isLeader && <LeaderDot />}
+      <span className="max-w-full truncate px-3 text-sm font-semibold">
         {isTurn && "▶ "}
         {player?.nickname ?? "?"}
       </span>
@@ -330,17 +355,9 @@ function Seat({
         >
           {seatNo}
         </span>
-        {isMe && (
-          <span className="rounded-full bg-zinc-800 px-1.5 text-[9px] font-bold uppercase text-white dark:bg-zinc-100 dark:text-zinc-900">
-            tu
-          </span>
-        )}
-        {isLeader && (
-          <span className="rounded-full bg-amber-400 px-1.5 text-[9px] font-bold uppercase text-amber-950">a început</span>
-        )}
         {isTurn && (
           <span className="rounded-full bg-indigo-600 px-1.5 text-[9px] font-bold uppercase text-white">
-            {isMe ? "rândul tău" : "urmează"}
+            urmează
           </span>
         )}
         {partner && (
@@ -349,14 +366,12 @@ function Seat({
       </span>
       <OfflineBadge connected={player?.connected} />
       <KickBadge remainingMs={player?.kickRemainingMs ?? null} />
-      {!isMe && (
-        <span className="flex h-8 items-center">
-          {Array.from({ length: count }, (_, i) => (
-            <CardBack key={i} size="sm" className={`!h-8 !w-6 ${i > 0 ? "-ml-3" : ""}`} />
-          ))}
-          {count === 0 && <span className="text-xs text-zinc-400">fără cărți</span>}
-        </span>
-      )}
+      <span className="flex h-8 items-center">
+        {Array.from({ length: count }, (_, i) => (
+          <CardBack key={i} size="sm" className={`!h-8 !w-6 ${i > 0 ? "-ml-3" : ""}`} />
+        ))}
+        {count === 0 && <span className="text-xs text-zinc-400">fără cărți</span>}
+      </span>
       {canKick && player && player.kickRemainingMs === null && (
         <button
           type="button"

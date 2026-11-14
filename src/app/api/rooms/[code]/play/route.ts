@@ -10,7 +10,6 @@ export async function POST(req: Request, ctx: RouteContext<"/api/rooms/[code]/pl
     const body = await readJson(req);
     if (!isCard(body.card)) fail(400, "Carte invalidă.");
     const card = body.card;
-    await applyMove(room, (deal) => playCard(deal, player.id, card), "card_played");
-    return { ok: true };
+    return await applyMove(room, (deal) => playCard(deal, player.id, card), "card_played", player);
   });
 }

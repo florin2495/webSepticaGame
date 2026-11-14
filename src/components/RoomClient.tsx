@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import {
+  actionsInFlight,
   api,
   ApiRequestError,
   clearSession,
@@ -56,18 +57,37 @@ function useRoomState(code: string, token: string) {
   const [receivedAt, setReceivedAt] = useState(0);
   const [error, setError] = useState("");
   const [missing, setMissing] = useState(false);
-  const latest = useRef(0);
+  const latest = useRef(0); // id of the last /state request started
+  const applied = useRef(0); // id of the request (or action response) the screen shows
+  const version = useRef(-1); // room version on screen
+  const meId = useRef<string | null>(null);
+
+  // A state that came back in an action response: apply it directly (no extra GET) unless a newer one is in.
+  const applyState = useCallback((s: RoomState) => {
+    if (s.room.version < version.current) return;
+    version.current = s.room.version;
+    meId.current = s.me.id;
+    applied.current = latest.current; // any /state request started before this is older: dropped
+    setState(s);
+    setReceivedAt(Date.now());
+    setError("");
+  }, []);
 
   const refresh = useCallback(async () => {
     const id = ++latest.current;
     try {
       const s = await api<RoomState>(`/api/rooms/${code}/state`, { token });
-      if (id !== latest.current) return; // a newer request already answered
+      // Show any answer newer than what is on screen (waiting for the *latest* request dropped broadcast answers).
+      if (id <= applied.current) return;
+      if (s.room.version < version.current) return; // older than what an action response already applied
+      applied.current = id;
+      version.current = s.room.version;
+      meId.current = s.me.id;
       setState(s);
       setReceivedAt(Date.now());
       setError("");
     } catch (err) {
-      if (id !== latest.current) return;
+      if (id <= applied.current) return;
       if (err instanceof ApiRequestError && err.status === 401) {
         // Another tab may already hold a newer token for this room (seat reclaimed): keep that one.
         if (parseSession(readSessionRaw(code))?.token !== token) return;
@@ -125,7 +145,12 @@ function useRoomState(code: string, token: string) {
     let retry: number | undefined;
     const channel = client
       .channel(`room:${roomId}`)
-      .on("broadcast", { event: "refresh" }, () => void refresh())
+      .on("broadcast", { event: "refresh" }, ({ payload }) => {
+        // The mover applies this version from its own action response: skip the duplicate fetch.
+        const { version: v, by } = (payload ?? {}) as { version?: number; by?: string };
+        if (typeof v === "number" && (v <= version.current || (by === meId.current && actionsInFlight.count > 0))) return;
+        void refresh();
+      })
       .subscribe((status) => {
         if (disposed) return; // CLOSED from our own cleanup
         if (status === "SUBSCRIBED") void refresh(); // catch anything missed while connecting
@@ -140,11 +165,11 @@ function useRoomState(code: string, token: string) {
     };
   }, [roomId, refresh, reconnectKey]);
 
-  return { state, receivedAt, error, missing, refresh };
+  return { state, receivedAt, error, missing, refresh, applyState };
 }
 
 function Room({ code, token }: { code: string; token: string }) {
-  const { state, receivedAt, error, missing, refresh } = useRoomState(code, token);
+  const { state, receivedAt, error, missing, refresh, applyState } = useRoomState(code, token);
 
   // A pending kick is enforced by the server on the first request after its deadline: refresh once then.
   useEffect(() => {
@@ -187,9 +212,9 @@ function Room({ code, token }: { code: string; token: string }) {
       <RoomHeader state={state} />
       {error && <ErrorText>Conexiune instabilă: {error}</ErrorText>}
       {state.room.status === "lobby" ? (
-        <Lobby state={state} token={token} refresh={refresh} />
+        <Lobby state={state} token={token} refresh={refresh} applyState={applyState} />
       ) : (
-        <Game state={state} token={token} refresh={refresh} />
+        <Game state={state} token={token} refresh={refresh} applyState={applyState} />
       )}
       <Spectators state={state} token={token} refresh={refresh} />
       <SettingsPanel />

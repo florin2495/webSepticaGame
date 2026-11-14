@@ -6,25 +6,31 @@ import { cleanText, fail, handle, isUniqueViolation, readJson } from "@/lib/serv
 import { cleanupExpiredRooms } from "@/lib/server/room";
 import type { RoomListItem } from "@/lib/types";
 
-// GET /api/rooms - public list of rooms that can be joined right now (lobby, not idle).
+// GET /api/rooms - public list of all live rooms (lobby, in-game and finished; idle ones are cleaned up first).
+// Joining a room that is not in the lobby makes you a spectator.
 export async function GET() {
   await connection(); // always request-time, never prerendered at build
   return handle(async () => {
     await cleanupExpiredRooms();
     const { data, error } = await db()
       .from(T.rooms)
-      .select("code, name, teams, password_hash, last_activity_at, players:septica_players!septica_players_room_id_fkey(count)")
-      .eq("status", "lobby")
+      .select("code, name, teams, status, password_hash, last_activity_at, players:septica_players!septica_players_room_id_fkey(role)")
       .order("last_activity_at", { ascending: false })
       .limit(50);
     if (error) throw error;
-    const rooms: RoomListItem[] = (data ?? []).map((r) => ({
-      code: r.code,
-      name: r.name,
-      teams: r.teams,
-      hasPassword: r.password_hash !== null,
-      players: (r.players as unknown as { count: number }[])[0]?.count ?? 0,
-    }));
+    const rooms: RoomListItem[] = (data ?? []).map((r) => {
+      const members = (r.players ?? []) as unknown as { role: "player" | "spectator" }[];
+      const seated = members.filter((m) => m.role === "player").length;
+      return {
+        code: r.code,
+        name: r.name,
+        teams: r.teams,
+        hasPassword: r.password_hash !== null,
+        status: r.status,
+        players: seated,
+        spectators: members.length - seated,
+      };
+    });
     return { rooms };
   });
 }

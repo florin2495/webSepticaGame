@@ -65,6 +65,8 @@ export interface RoomState {
     teams: boolean;
     status: RoomStatus;
     round: number;
+    /** Bumped on every deal write: lets the client drop stale / duplicate state. */
+    version: number;
     hasPassword: boolean;
     hostPlayerId: string | null;
   };
@@ -83,7 +85,10 @@ export interface RoomListItem {
   name: string;
   teams: boolean;
   hasPassword: boolean;
+  status: RoomStatus;
+  /** Seated players. */
   players: number;
+  spectators: number;
 }
 
 export interface Session {
