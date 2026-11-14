@@ -31,6 +31,13 @@ Rules for schema changes:
 - Code that needs a migration must not be pushed until the user has run it. Verify by effect with the service key.
 - Never print or commit the keys in `.env.local`.
 
+## Abandoned rooms (120 s)
+- `GET /api/rooms` (the room list behind "Intră în cameră") first runs `cleanupAbandonedRooms` (`src/lib/server/room.ts`):
+  every room in ANY status (also `playing`) whose `last_activity_at` is older than `ROOM_ABANDONED_MS` (120 s, `septica.ts`)
+  and with no player/spectator (`septica_players`) `last_seen_at` within 120 s is deleted (players cascade). Open room
+  pages keep both fresh (`/state` polls every 15 s, stamps `last_seen_at` every 10 s and `last_activity_at` every 20 s),
+  so only rooms nobody has open disappear. The 10-minute lobby/finished expiry stays too.
+
 ## Code map
 - `src/lib/septica.ts` - pure rules (deck, deal, play, let go, scoring, seats/teams). Tested in `septica.test.ts`.
 - `src/lib/server/room.ts` - load/auth, `saveRoom` (version check), `applyMove`, per-player `buildState`.

@@ -3,15 +3,16 @@ import { NICKNAME_MAX } from "@/lib/septica";
 import { hashDeviceId, hashPassword, hashToken, newPlayerToken, newRoomCode } from "@/lib/server/crypto";
 import { db, T } from "@/lib/server/db";
 import { cleanText, fail, handle, isUniqueViolation, readJson } from "@/lib/server/http";
-import { cleanupExpiredRooms } from "@/lib/server/room";
+import { cleanupAbandonedRooms, cleanupExpiredRooms } from "@/lib/server/room";
 import type { RoomListItem } from "@/lib/types";
 
 // GET /api/rooms - public list of all live rooms (lobby, in-game and finished; idle ones are cleaned up first).
 // Joining a room that is not in the lobby makes you a spectator.
+// Loading the list ("Intră în cameră") first sweeps abandoned rooms: no member seen and no activity for 120 s.
 export async function GET() {
   await connection(); // always request-time, never prerendered at build
   return handle(async () => {
-    await cleanupExpiredRooms();
+    await Promise.all([cleanupExpiredRooms(), cleanupAbandonedRooms()]);
     const { data, error } = await db()
       .from(T.rooms)
       .select("code, name, teams, status, password_hash, last_activity_at, players:septica_players!septica_players_room_id_fkey(role)")
