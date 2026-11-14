@@ -1,11 +1,14 @@
 // End-to-end test of the Șeptică API with real players. Usage: node scripts/e2e.mjs [baseUrl incl. /septica]
-// Plain Node 20+ fetch, no dependencies. Every room is named e2e-test-... and removed at the end
-// (everyone leaves; leftovers are deleted in the DB with the service key from .env.local, if present).
+// Plain Node 20+ fetch, no dependencies. Run by .github/workflows/e2e.yml against the deployed site.
+// Every room is named e2e-test-... (never counted on the hub leaderboard) and removed at the end: everyone leaves,
+// then leftovers are deleted in the DB with the service key (env NEXT_PUBLIC_SUPABASE_URL +
+// SUPABASE_SERVICE_ROLE_KEY, else .env.local). Never sends feedback.
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const BASE = (process.argv[2] ?? "https://games.hailatat.icu/septica").replace(/\/$/, "");
 const ORIGIN = new URL(BASE).origin;
+const BASE_PATH = new URL(BASE).pathname;
 const created = new Set();
 let failures = 0;
 
@@ -43,16 +46,23 @@ const envFile = () => {
     return {};
   }
 };
-// Local runs report to a throwaway leaderboard game (LEADERBOARD_GAME in .env.local), never to "septica".
-const LB_GAME = envFile().LEADERBOARD_GAME;
+/** Supabase URL + service key: environment (GitHub Actions secrets) first, else .env.local. */
+function supabaseEnv() {
+  const { NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
+  if (NEXT_PUBLIC_SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) return { NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY };
+  return envFile();
+}
+const HAS_KEY = () => !!(supabaseEnv().NEXT_PUBLIC_SUPABASE_URL && supabaseEnv().SUPABASE_SERVICE_ROLE_KEY);
+// A local server reports to a throwaway leaderboard game (LEADERBOARD_GAME in .env.local), never to "septica".
+// Against the deployed site the game is "septica"; test rooms (e2e-test-*) must never be reported there.
+const LB_GAME = LOCAL ? envFile().LEADERBOARD_GAME : "septica";
 async function rest(path, init = {}) {
-  const env = envFile();
+  const env = supabaseEnv();
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
   const res = await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/${path}`, { ...init, headers: { apikey: key, authorization: `Bearer ${key}` } });
   return res.status === 204 ? [] : res.json();
 }
 const lbRows = (roomCode) => rest(`hub_leaderboard_rounds?game=eq.${LB_GAME}&room_code=eq.${roomCode}`);
-const lbPlayers = (keys) => rest(`hub_leaderboard?game=eq.${LB_GAME}&player_key=in.(${keys.join(",")})`);
 
 const sleep =(ms) => new Promise((r) => setTimeout(r, ms));
 const roomName = (tag) => `e2e-test-${tag}-${Date.now().toString(36)}`.slice(0, 40);
@@ -183,10 +193,15 @@ async function httpChecks() {
   const page = await fetch(BASE);
   const html = await page.text();
   check(page.status === 200 && html.includes("Șeptică"), `page 200 (${page.status})`);
-  const assets = [...new Set(html.match(/\/septica\/_next\/static\/[^"']+\.(js|css)/g) ?? [])];
-  let assetsOk = assets.length > 0;
-  for (const a of assets.slice(0, 8)) if ((await fetch(ORIGIN + a)).status !== 200) assetsOk = false;
-  check(assetsOk, `${assets.length} /septica/_next assets, first 8 return 200`);
+  // The settings panel (with the version) is only on the room page: collect the chunks of both pages.
+  const roomHtml = await (await fetch(`${BASE}/room/ABCDEF`)).text();
+  const assets = [...new Set((html + roomHtml).match(new RegExp(`${BASE_PATH}/_next/static/[^"'\\\\]+\\.(?:js|css)`, "g")) ?? [])];
+  const assetStatus = await Promise.all(assets.map(async (a) => (await fetch(ORIGIN + a)).status));
+  check(assets.length > 0 && assetStatus.every((x) => x === 200), `${assets.length} ${BASE_PATH}/_next assets, all 200`);
+  const version = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+  let hasVersion = false;
+  for (const a of assets.filter((x) => x.endsWith(".js"))) if ((await (await fetch(ORIGIN + a)).text()).includes(`"${version}"`)) hasVersion = true;
+  check(hasVersion, `client JS contains version ${version}`);
   const man = await fetch(`${BASE}/manifest.webmanifest`);
   const manifest = await man.json().catch(() => null);
   check(man.status === 200 && manifest?.start_url === "/septica/", "manifest 200, start_url /septica/");
@@ -227,7 +242,10 @@ async function main() {
   check((await call(`/api/rooms/${code}/join`, { body: { nickname: "bob", password: "pw", deviceId: dev.D } })).status === 409, "nickname of a connected seat from another device = 409");
   check((await call(`/api/rooms/${code}/join`, { body: { nickname: "x".repeat(13), password: "pw" } })).status === 400, "13-char nickname = 400");
   const list = await call("/api/rooms");
-  check(list.data.rooms?.some((x) => x.code === code && x.hasPassword && x.players === 3), "room in public list, with password and 3 players");
+  check(
+    list.data.rooms?.some((x) => x.code === code && x.hasPassword && x.players === 3 && x.status === "lobby" && x.spectators === 0),
+    "room in public list: lobby, with password, 3 players, 0 spectators",
+  );
   check(!JSON.stringify(list.data).includes("scrypt"), "list does not leak the password hash");
 
   console.log("Rejoin with the same device");
@@ -254,6 +272,11 @@ async function main() {
   check(sp.me?.role === "spectator" && sp.game.hand.length === 0 && sp.game.legal.length === 0, "spectator has no hand and no legal cards");
   check(!/"(hands|stock|token_hash|device_hash)"/.test(JSON.stringify(sp)) && sp.game.stockCount === 30 - 12, "spectator state leaks nothing private");
   check(sp.players.length === 3 && sp.spectators.length === 1, "spectator not counted among the players");
+  const list2 = await call("/api/rooms");
+  check(
+    list2.data.rooms?.some((x) => x.code === code && x.status === "playing" && x.players === 3 && x.spectators === 1),
+    "running room still listed: status playing, 3 players, 1 spectator",
+  );
   check((await call(`/api/rooms/${code}/play`, { token: D.token, body: { card: "7S" } })).status === 403, "spectator cannot play (403)");
   check((await call(`/api/rooms/${code}/ready`, { token: D.token, body: { ready: true } })).status === 403, "spectator cannot ready (403)");
   check((await call(`/api/rooms/${code}/reorder`, { token: A.token, body: { order: [A.playerId, B.playerId, C.playerId] } })).status === 409, "reorder mid-deal = 409");
@@ -289,14 +312,11 @@ async function main() {
   } else check(d1.all[A.playerId].players.every((p) => p.wins === 0), "draw: nobody gets a win");
   check((await call(`/api/rooms/${code}/play`, { token: A.token, body: { card: "7S" } })).status === 409, "play after the end = 409");
 
-  console.log("Leaderboard report (local only)");
-  if (LOCAL) {
+  console.log("Leaderboard: test rooms are never reported");
+  if (HAS_KEY() && LB_GAME) {
     const rows = await lbRows(code);
-    check(rows.length === 1, "round 1 claimed once in hub_leaderboard_rounds");
-    const lb = await lbPlayers(["ana", "bob", "cris"]);
-    check(lb.length === 3 && lb.every((x) => x.games === 1), "ana/bob/cris: games = 1");
-    check(lb.reduce((a, x) => a + x.wins, 0) === (r1.winners.length === 1 ? 1 : 0), "wins counted for the winner only (none on a draw)");
-  } else console.log("  (skipped: needs the DB service key and a local server)");
+    check(Array.isArray(rows) && rows.length === 0, `no hub_leaderboard_rounds row for the e2e-test room (game ${LB_GAME})`);
+  } else console.log("  (skipped: needs the DB service key)");
 
   console.log("Reorder (host, between rounds)");
   const ids3 = [A.playerId, B.playerId, C.playerId];
@@ -387,11 +407,9 @@ async function main() {
   check((await call(`/api/rooms/${code3}/leave`, { token: I.token, body: {} })).data.roomClosed === true, "room closed");
   created.delete(code3);
 
-  console.log("Feedback (no rows written)");
-  check((await call("/api/feedback", { body: { message: "", nickname: "e2e" } })).status === 400, "empty feedback = 400");
 }
 
-/** Safety net: delete rooms left behind by a failed run, straight in the DB (service key from .env.local). */
+/** Safety net: delete rooms left behind by a failed run, straight in the DB (service key from env or .env.local). */
 async function cleanup() {
   if (LOCAL && LB_GAME && LB_GAME !== "septica") {
     await rest(`hub_leaderboard?game=eq.${LB_GAME}`, { method: "DELETE" });
@@ -399,12 +417,7 @@ async function cleanup() {
   }
   if (created.size === 0) return;
   try {
-    const env = Object.fromEntries(
-      readFileSync(new URL("../.env.local", import.meta.url), "utf8")
-        .split(/\r?\n/)
-        .filter((l) => l.includes("=") && !l.startsWith("#"))
-        .map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim()]),
-    );
+    const env = supabaseEnv();
     const url = `${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/septica_rooms?code=in.(${[...created].join(",")})&name=like.e2e-test-*`;
     const key = env.SUPABASE_SERVICE_ROLE_KEY;
     const res = await fetch(url, { method: "DELETE", headers: { apikey: key, authorization: `Bearer ${key}` } });

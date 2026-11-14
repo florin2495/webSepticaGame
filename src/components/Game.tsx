@@ -187,7 +187,7 @@ export function Game({
               {hand.length === 0 ? (
                 <p className="py-4 text-center text-sm text-zinc-500">Nu mai ai cărți.</p>
               ) : (
-                <div className="flex justify-center gap-1 sm:gap-2">
+                <div className="flex justify-center gap-1 sm:gap-2" data-testid="my-hand">
                   {hand.map((c) => {
                     const legal = game.legal.includes(c);
                     return (
@@ -200,6 +200,8 @@ export function Game({
                           pick === c ? "-translate-y-3 ring-4 ring-indigo-500" : ""
                         }`}
                         aria-label={`Joacă ${c}`}
+                        data-card={c}
+                        data-legal={legal}
                       >
                         <PlayingCard card={c} size="lg" />
                       </button>
@@ -225,11 +227,12 @@ export function Game({
         <p
           className={`text-center text-sm font-semibold ${myTurn ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-600 dark:text-zinc-300"}`}
           role="status"
+          data-testid="game-status"
         >
           {status}
         </p>
         {game.canLetGo && (
-          <Button variant="secondary" disabled={busy !== null} onClick={() => void run("let-go")}>
+          <Button variant="secondary" disabled={busy !== null} onClick={() => void run("let-go")} data-testid="let-go">
             Las mâna lui {nick(game.holder)}
           </Button>
         )}
@@ -282,9 +285,7 @@ function TrickTable({
     return FELT_SPOT[seatPos(k, seatCount)];
   };
   return (
-    <div
-      className="relative h-44 w-full rounded-2xl bg-emerald-800 shadow-inner"
-    >
+    <div className="relative h-44 w-full rounded-2xl bg-emerald-800 shadow-inner" data-testid="trick-table" data-last={showingLast}>
       {plays.length === 0 ? (
         <span className="absolute inset-0 flex items-center justify-center text-xs text-emerald-100/80">Masa e goală</span>
       ) : (
@@ -293,6 +294,7 @@ function TrickTable({
           return (
             <span
               key={`${p.card}-${i}`}
+              data-card={p.card}
               className={`absolute -translate-x-1/2 -translate-y-1/2 ${showingLast ? "opacity-60" : ""}`}
               style={{ left: `${x}%`, top: `${y}%` }}
               title={nick(p.playerId)}
@@ -339,6 +341,9 @@ function Seat({
   const team = player?.team;
   return (
     <div
+      data-testid="seat"
+      data-player-id={player?.id}
+      data-turn={isTurn}
       className={`relative flex flex-col items-center gap-1 rounded-xl border p-2 text-center ${
         team === 0 || team === 1 ? TEAM_STYLES[team] : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
       } ${isTurn ? "ring-2 ring-indigo-500" : ""}`}
@@ -377,7 +382,7 @@ function Seat({
           type="button"
           disabled={busy}
           onClick={onKick}
-          className="min-h-8 rounded-md border border-rose-300 px-2 text-[11px] font-semibold text-rose-600 disabled:opacity-40 dark:border-rose-800 dark:text-rose-400"
+          className="min-h-8 max-w-full rounded-md border border-rose-300 px-2 text-[11px] font-semibold leading-tight text-rose-600 disabled:opacity-40 dark:border-rose-800 dark:text-rose-400"
           aria-label={`Scoate pe ${player.nickname}`}
         >
           Scoate
@@ -388,7 +393,7 @@ function Seat({
           type="button"
           disabled={busy}
           onClick={onSkip}
-          className="min-h-8 rounded-md border border-zinc-300 px-2 text-[11px] font-semibold text-zinc-600 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300"
+          className="min-h-8 max-w-full rounded-md border border-zinc-300 px-2 text-[11px] font-semibold leading-tight text-zinc-600 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300"
         >
           Joacă pentru el
         </button>
@@ -406,7 +411,7 @@ function sideName(side: SideView, players: PublicPlayer[], teams: boolean): stri
 
 function Scoreboard({ sides, players, teams, meId }: { sides: SideView[]; players: PublicPlayer[]; teams: boolean; meId: string }) {
   return (
-    <div className="flex flex-wrap justify-center gap-2 text-sm">
+    <div className="flex flex-wrap justify-center gap-2 text-sm" data-testid="scoreboard">
       {sides.map((s) => (
         <span
           key={s.index}
@@ -498,7 +503,7 @@ function FinishedPanel({
   const iWon = winner?.members.includes(me.id) ?? false;
 
   return (
-    <div className="flex flex-col gap-3 text-center">
+    <div className="flex flex-col gap-3 text-center" data-testid="finished-panel">
       {result.aborted ? (
         <p className="text-lg font-bold">Runda s-a anulat: {result.aborted.nickname} a plecat.</p>
       ) : draw ? (
@@ -530,10 +535,10 @@ function FinishedPanel({
             <OrderControls state={state} busy={busy} run={run} nextRound={room.round + 1} />
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Button disabled={busy !== null} onClick={() => void run("new-round")}>
+            <Button disabled={busy !== null} onClick={() => void run("new-round")} data-testid="new-round">
               {busy === "new-round" ? "Se împarte…" : "Rundă nouă"}
             </Button>
-            <Button variant="secondary" disabled={busy !== null} onClick={() => void run("lobby")}>
+            <Button variant="secondary" disabled={busy !== null} onClick={() => void run("lobby")} data-testid="back-to-lobby">
               Înapoi în lobby
             </Button>
           </div>

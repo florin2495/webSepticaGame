@@ -14,14 +14,20 @@ export function Spectators({ state, token, refresh }: { state: RoomState; token:
   if (!isSpectator && spectators.length === 0) return null;
 
   return (
-    <Card className="flex flex-col gap-2">
+    <Card className="flex flex-col gap-2" data-testid="spectator-list">
       <h2 className="font-bold">Spectatori ({spectators.length}/16)</h2>
       {isSpectator && (
         <>
-          <p className="text-sm text-zinc-600 dark:text-zinc-300">
+          <p className="text-sm text-zinc-600 dark:text-zinc-300" data-testid="spectator-status">
             Privești runda. Nu vezi cărțile nimănui și nu poți juca.
           </p>
-          <Button variant={me.queued ? "secondary" : "primary"} disabled={busy !== null} onClick={() => void run("queue")}>
+          <Button
+            variant={me.queued ? "secondary" : "primary"}
+            disabled={busy !== null}
+            onClick={() => void run("queue")}
+            data-testid="queue-toggle"
+            data-queued={me.queued}
+          >
             {room.status === "lobby" ? "Intră în joc" : me.queued ? "Nu mai intru la runda următoare" : "Intră la runda următoare"}
           </Button>
           {me.queued && <p className="text-xs text-zinc-500">Ești în coadă: vei juca la runda următoare dacă sunt locuri libere.</p>}
@@ -30,7 +36,7 @@ export function Spectators({ state, token, refresh }: { state: RoomState; token:
       {spectators.length > 0 && (
         <ul className="flex flex-wrap gap-1.5 text-sm">
           {spectators.map((s) => (
-            <li key={s.id} className="flex items-center gap-1 rounded-full border border-zinc-300 px-2.5 py-0.5 dark:border-zinc-700">
+            <li key={s.id} data-player-id={s.id} data-queued={s.queued} className="flex items-center gap-1 rounded-full border border-zinc-300 px-2.5 py-0.5 dark:border-zinc-700">
               <span>
                 {s.nickname}
                 {s.id === me.id && <span className="text-zinc-500"> (tu)</span>}

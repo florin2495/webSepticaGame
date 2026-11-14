@@ -18,6 +18,13 @@ export const TOTAL_POINTS = 8;
 export const NICKNAME_MAX = 12;
 
 /**
+ * Rooms made by the automated tests (scripts/e2e.mjs, tests/ui) are named like this. They run against the
+ * production DB, so their rounds are never reported to the hub leaderboard.
+ */
+export const TEST_ROOM_PREFIX = "e2e-test-";
+export const isTestRoom = (name: string) => name.startsWith(TEST_ROOM_PREFIX);
+
+/**
  * Lobby/finished rooms are closed (deleted) after this long without activity. Every open room page
  * polls /state, which refreshes the timer (see PRESENCE_TOUCH_MS), so a room only closes once nobody
  * has it open.

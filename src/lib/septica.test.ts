@@ -6,6 +6,7 @@ import {
   type Deal,
   isDealOver,
   isRoomAbandoned,
+  isTestRoom,
   legalCards,
   letGo,
   newDeal,
@@ -249,5 +250,14 @@ describe("abandoned rooms (any status)", () => {
   });
   it("is kept while any player or spectator was seen recently", () => {
     expect(isRoomAbandoned(sec(600), [sec(600), sec(30)], now)).toBe(false);
+  });
+});
+
+describe("test rooms", () => {
+  it("recognises the e2e test room names only", () => {
+    expect(isTestRoom("e2e-test-ffa-abc")).toBe(true);
+    expect(isTestRoom("e2e-test-ui-abc")).toBe(true);
+    expect(isTestRoom("Septica la Ana")).toBe(false);
+    expect(isTestRoom("my e2e-test-room")).toBe(false);
   });
 });

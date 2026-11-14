@@ -208,7 +208,13 @@ function Room({ code, token }: { code: string; token: string }) {
 
   return (
     <KickClockContext.Provider value={receivedAt}>
-    <main className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 py-4">
+    <main
+      className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 py-4"
+      data-testid="room"
+      data-status={state.room.status}
+      data-round={state.room.round}
+      data-version={state.room.version}
+    >
       <RoomHeader state={state} />
       {error && <ErrorText>Conexiune instabilă: {error}</ErrorText>}
       {state.room.status === "lobby" ? (
@@ -263,7 +269,7 @@ function LeaveButton({ state, token }: { state: RoomState; token: string }) {
 
   return (
     <div className="pb-6 pt-2 text-center">
-      <Button variant="danger" className="w-full" onClick={() => void leave()} disabled={busy}>
+      <Button variant="danger" className="w-full" onClick={() => void leave()} disabled={busy} data-testid="leave">
         {busy ? "Se iese…" : room.status === "playing" && !spectating ? "Părăsește jocul" : "Părăsește camera"}
       </Button>
       <div className="mt-2">
@@ -314,7 +320,9 @@ function RoomHeader({ state }: { state: RoomState }) {
         className="shrink-0 rounded-lg border border-zinc-300 px-3 py-1.5 text-center dark:border-zinc-700"
         aria-label="Invită prieteni"
       >
-        <span className="block font-mono text-lg font-bold tracking-widest">{room.code}</span>
+        <span className="block font-mono text-lg font-bold tracking-widest" data-testid="room-code">
+          {room.code}
+        </span>
         <span className="block text-[10px] font-semibold uppercase text-zinc-500">
           {copied ? "Link copiat" : "Invită"}
         </span>
@@ -372,7 +380,7 @@ function JoinForm({ code }: { code: string }) {
             autoComplete="off"
           />
           <ErrorText>{error}</ErrorText>
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy} data-testid="join-submit">
             {busy ? "Se încarcă…" : "Intră"}
           </Button>
         </form>

@@ -87,14 +87,14 @@ export function RoomList({
     );
   } else {
     content = (
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-2" data-testid="room-list">
         {rooms.map((r) => {
           const mine = parseSession(readSessionRaw(r.code)) !== null;
           const active = selected === r.code;
           const canSit = r.status === "lobby" && r.players < MAX_PLAYERS;
           const badge = STATUS_BADGE[r.status];
           return (
-            <li key={r.code}>
+            <li key={r.code} data-code={r.code} data-status={r.status}>
               <button
                 type="button"
                 onClick={() => (mine ? onRejoin(r.code) : onSelect(r))}

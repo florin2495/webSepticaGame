@@ -36,7 +36,7 @@ export function Lobby({
   }
 
   const row = (p: PublicPlayer) => (
-    <li key={p.id} className="flex items-center justify-between gap-2 py-2">
+    <li key={p.id} className="flex items-center justify-between gap-2 py-2" data-player-id={p.id} data-ready={p.ready}>
       <span className="flex min-w-0 items-center gap-2">
         <span className="truncate">
           {p.nickname}
@@ -81,7 +81,7 @@ export function Lobby({
 
   return (
     <>
-      <Card>
+      <Card data-testid="lobby-players">
         <h2 className="mb-1 font-bold">
           Jucători ({players.length}/{MAX_PLAYERS})
         </h2>
@@ -127,13 +127,14 @@ export function Lobby({
         <Button
           variant={me.ready ? "secondary" : "primary"}
           disabled={busy !== null}
+          data-testid="ready"
           onClick={() => void run("ready", { ready: !me.ready })}
         >
           {me.ready ? "Nu mai sunt gata" : "Sunt gata"}
         </Button>
         {isHost ? (
           <>
-            <Button disabled={busy !== null || startIssue !== null} onClick={() => void run("start")}>
+            <Button disabled={busy !== null || startIssue !== null} onClick={() => void run("start")} data-testid="start-game">
               {busy === "start" ? "Se împart cărțile…" : "Împarte cărțile"}
             </Button>
             {startIssue && <p className="text-center text-sm text-zinc-500">{startIssue}</p>}

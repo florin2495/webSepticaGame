@@ -5,6 +5,7 @@ import {
   isDealOver,
   isRoomAbandoned,
   isRoomExpired,
+  isTestRoom,
   legalCards,
   minutesLabel,
   ROOM_ABANDONED_MS,
@@ -222,11 +223,14 @@ export async function applyMove(
     if (error) throw error;
   }
   // Hub leaderboard: everybody who played gets a game, the winning side a win (a draw has no winner).
-  await reportRound(
-    room.code,
-    room.round,
-    players.filter((x) => next.order.includes(x.id)).map((x) => ({ nickname: x.nickname, won: winners.includes(x.id) })),
-  );
+  // Test rooms (e2e-test-*, run against the production DB) never count.
+  if (!isTestRoom(room.name)) {
+    await reportRound(
+      room.code,
+      room.round,
+      players.filter((x) => next.order.includes(x.id)).map((x) => ({ nickname: x.nickname, won: winners.includes(x.id) })),
+    );
+  }
   const [state] = await Promise.all([
     buildState({ ...room, deal: next, status: "finished", result, version }, viewer),
     notifyRoom(room.id, "round_finished", version, viewer.id),

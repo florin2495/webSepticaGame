@@ -3,7 +3,7 @@
 # webSepticaGame - project notes for Claude
 
 ## Accounts and deploy
-- GitHub: personal account **florin2495** only (repo `florin2495/webSepticaGame`, private). Never the work account.
+- GitHub: personal account **florin2495** only (repo `florin2495/webSepticaGame`, public). Never the work account.
   Local git identity is pinned in `.git/config`.
 - Vercel project is connected by the user manually; served at https://games.hailatat.icu/septica (`basePath`; the hub proxies it to web-septica-game.vercel.app).
   Functions run in `fra1` (Frankfurt, next to the Supabase DB) via `vercel.json`.
@@ -47,9 +47,51 @@ Rules for schema changes:
   kick cleared) from the same device (`device_hash`) or once the seat has been unseen for 45 s, also mid-deal.
   `/state` exposes only a derived `connected` flag ("deconectat" badge). Lobby/finished rooms close after 10 min idle.
 
-## Testing
-- `npm test`, `npx tsc --noEmit`, `npx eslint src`, `npx next build`.
-- End-to-end: drive the real API with 2, 3 and 4 players (incl. teams) against `npm run dev`; delete test rooms afterwards.
+## Testing (GitHub Actions, manual only)
+All checks run in GitHub Actions on the free tier (public repo, standard `ubuntu-latest` runners only, never billed
+runners), never locally (user's rule, see `D:\_DEv\CLAUDE.md`). Every workflow is `workflow_dispatch`
+only (no automatic trigger, the user's choice): nothing gates a push, and Vercel deploys `main` regardless.
+Start one with `gh workflow run <file> --ref main`, then `gh run watch` (or the Actions tab, "Run workflow").
+| Workflow | Runs |
+| --- | --- |
+| `.github/workflows/check.yml` "Check code" | `npx next typegen` + `npx tsc --noEmit` (typegen first, so route types in `.next/types` are checked), `npx eslint src`, `npx next build`. Every step runs even if an earlier one failed |
+| `.github/workflows/unit-tests.yml` "Unit tests" | `npm test` (Vitest: `src/lib/septica.test.ts`, `kick.test.ts`, `reconnect.test.ts`; pure logic, no DB) |
+| `.github/workflows/e2e.yml` "E2E" | `node scripts/e2e.mjs <base_url>` (input, default production `https://games.hailatat.icu/septica`); one run at a time |
+| `.github/workflows/e2e-ui.yml` "E2E UI (Playwright)" | `npx playwright test` (`playwright.config.ts`, tests in `tests/ui/*.e2e.ts`) against `base_url` (`E2E_BASE_URL`, default production), on desktop Chromium and an emulated iPhone 13 (WebKit). Same concurrency group as "E2E". On failure the report (traces, screenshots, videos) is uploaded as the `playwright-report` artifact |
 
-## Local testing notes
-- `.env.local` has `LEADERBOARD_GAME=septica-test` so local runs never touch the real `septica` leaderboard rows. `node scripts/e2e.mjs http://localhost:3008/septica` refuses to run without it and deletes the test rows afterwards.
+- E2E needs the repo secrets `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (cleanup safety net and the
+  leaderboard check; the script falls back to `.env.local`). It checks that the deployed client JS contains the
+  `package.json` version of the checked-out ref, so run it on `main` after the Vercel deploy of that version has finished.
+- Test rooms are named `e2e-test-…` (`TEST_ROOM_PREFIX` in `septica.ts`): their rounds are never reported to the hub
+  leaderboard (`applyMove` skips them), so tests against production never touch real `septica` leaderboard rows.
+  `LEADERBOARD_GAME` (env override in `leaderboard.ts`) is for local dev only; CI does not use it.
+- What E2E does: page / all `_next` assets / version / manifest / icons / `room/XXXXXX` over HTTP and that
+  `web-septica-game.vercel.app/septica` serves the same build, then drives the real API (production DB): 3 players
+  with a password (wrong / missing password, nickname taken, too long), room list (every room with status, players,
+  spectators; no hash leak), rejoin (same device, old token dead), ready/start rules, spectator joining a running deal
+  (no hand, 403 on player routes, queue toggle, rejoin), kick with "Ignoră", host plays for a player, illegal moves
+  (out of turn, card not in hand, malformed, bad/no token, let go not allowed), a full 3-player deal with every trick
+  winner and the score checked and hidden hands verified, no leaderboard row for the test room, reorder, new round
+  (queued spectator promoted), leave mid-deal (cancelled), lobby, 2 vs 2 teams full deal, kicks, host hand-over, last
+  one out closes the room, a 2-player room with a pending kick enforced after 10 s. Never calls `/api/feedback`.
+- What E2E UI does (`tests/ui/`, shared steps in `helpers.ts`; every change must reach the other screens within 5 s
+  without a reload, polling is 15 s, so this checks Realtime). The deal is random: each move is picked from the
+  `/state` JSON of the player on turn (token from their localStorage) and made by clicking that card / "Las mâna":
+  - `game.e2e.ts` (both projects): two browser contexts create a room, join by link, ready, deal, play the whole deal
+    (each move seen live on the other screen: room version + the card on the felt), end-of-round panel, new round,
+    guest leaves mid-round (host sees it cancelled), host leaves.
+  - `spectator.e2e.ts` (desktop Chromium only): a third person joins mid-deal = spectator (no hand, no player buttons),
+    the players see them, queue ("în coadă" seen by the players), they see every move and the end, the new round
+    seats them.
+  - `mobile.e2e.ts` (iPhone only): 4-player table; no horizontal scroll on home / room list / lobby / game, no seat
+    overflows its frame, hand cards >= 44 px, seat buttons >= 24 px, a touch tap plays a card seen live.
+  Rooms are `e2e-test-ui-…`; a leftover is deleted with the service key from the same repo secrets.
+- Playwright files are `*.e2e.ts`, never `*.spec.ts` / `*.test.ts` (Vitest would pick those up).
+- Test ids used by `tests/ui` (renaming or removing one breaks it): `home-submit`, `tab-create` / `tab-join`,
+  `room-list` (items with `data-code`, `data-status`), `join-submit`, `room` (the room `<main>`, with `data-status`,
+  `data-round`, `data-version`), `room-code`, `leave`, `lobby-players` (rows with `data-player-id`, `data-ready`),
+  `ready`, `start-game`, `my-hand` (card buttons with `data-card`, `data-legal`), `trick-table` (cards with
+  `data-card`), `seat` (`data-player-id`, `data-turn`), `game-status`, `let-go`, `scoreboard`, `finished-panel`,
+  `new-round`, `back-to-lobby`, `spectator-list` (chips with `data-player-id`, `data-queued`), `spectator-status`,
+  `queue-toggle` (`data-queued`).
+
