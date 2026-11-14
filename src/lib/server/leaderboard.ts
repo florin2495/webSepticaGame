@@ -9,7 +9,7 @@ import { db } from "./db";
 const GAME = process.env.LEADERBOARD_GAME?.trim() || "septica";
 
 /** One person = one lowercase, trimmed nickname (there are no accounts). */
-export const playerKey = (nickname: string) => nickname.trim().toLowerCase();
+export const playerKey = (nickname: string) => nickname.trim().toLowerCase().slice(0, 40);
 
 interface Entry {
   nickname: string;
@@ -46,7 +46,7 @@ export async function reportRound(roomCode: string, roundNo: number, entries: En
           {
             game: GAME,
             player_key: key,
-            display_name: e.nickname.trim(),
+            display_name: e.nickname.trim().slice(0, 40),
             wins: (data?.wins ?? 0) + (e.won ? 1 : 0),
             games: (data?.games ?? 0) + 1,
             updated_at: new Date().toISOString(),
