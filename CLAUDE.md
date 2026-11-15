@@ -23,7 +23,7 @@ Migrations are run by hand in the Supabase SQL editor - this list is the source 
 | `supabase/schema.sql` (initial) | yes (2026-11-07, verified) | `septica_rooms`, `septica_players`; anon gets 401 |
 | `supabase/migrations/001_pending_kick.sql` | yes (2026-11-07, verified) | `septica_players.kick_requested_at timestamptz` (kick during a game waits 10 s). Do not push the code before it runs. |
 | `supabase/migrations/002_reconnect.sql` | yes (2026-11-07, verified: service role 200, anon 401) | `septica_players.last_seen_at`, `device_hash` + index (rejoin the same seat). Do not push the code before it runs. |
-| `supabase/migrations/003_seat_spectator.sql` | yes (2026-11-08, verified by effect: seat/role/queued_at selectable with the service key) | `septica_players.seat`, `role` ('player'/'spectator'), `queued_at` (reorder + spectators). Idempotent. Do not push the code before it runs. |
+| `supabase/migrations/003_seat_spectator.sql` | yes (2026-11-08, verified by effect: seat/role/queued_at selectable with the service key; re-verified 2026-11-14 by effect: production E2E exercises its columns) | `septica_players.seat`, `role` ('player'/'spectator'), `queued_at` (reorder + spectators). Idempotent. Do not push the code before it runs. |
 | hub `hub_leaderboard*` (owned by the hub repo) | yes (2026-11-08, verified: both tables answer 200; round report tested locally) | `src/lib/server/leaderboard.ts` writes to it at the end of a round (errors are swallowed). Do not push before the hub migration ran. |
 
 Rules for schema changes:
@@ -31,12 +31,14 @@ Rules for schema changes:
 - Code that needs a migration must not be pushed until the user has run it. Verify by effect with the service key.
 - Never print or commit the keys in `.env.local`.
 
-## Abandoned rooms (120 s)
+## Abandoned rooms (600 s)
 - `GET /api/rooms` (the room list behind "Intră în cameră") first runs `cleanupAbandonedRooms` (`src/lib/server/room.ts`):
-  every room in ANY status (also `playing`) whose `last_activity_at` is older than `ROOM_ABANDONED_MS` (120 s, `septica.ts`)
-  and with no player/spectator (`septica_players`) `last_seen_at` within 120 s is deleted (players cascade). Open room
-  pages keep both fresh (`/state` polls every 15 s, stamps `last_seen_at` every 10 s and `last_activity_at` every 20 s),
-  so only rooms nobody has open disappear. The 10-minute lobby/finished expiry stays too.
+  every room in ANY status (also `playing`) whose `last_activity_at` is older than `ROOM_ABANDONED_MS` (600 s, `septica.ts`)
+  and with no player/spectator (`septica_players`) `last_seen_at` within 600 s is deleted (players cascade). Open room
+  pages keep both fresh (`/state` polls every 60 s plus Realtime refetches; `last_seen_at` is stamped at most every 10 s
+  and `last_activity_at` at most every 20 s), so only rooms nobody has open disappear. The 10-minute lobby/finished
+  expiry stays too. Unit-tested with the DB mocked in `src/lib/server/room.test.ts` (`vitest.config.ts` resolves `@/`).
+  A missing room answers 404 "Camera nu mai există (a fost închisă după inactivitate)." (`GONE`, no fixed duration).
 
 ## Code map
 - `src/lib/septica.ts` - pure rules (deck, deal, play, let go, scoring, seats/teams). Tested in `septica.test.ts`.
@@ -44,7 +46,7 @@ Rules for schema changes:
 - `src/lib/server/deal.ts` - start a deal, balance teams. `membership.ts` - leave/kick (cancels a running round).
 - Rejoin the same seat (`src/lib/reconnect.ts`): every member request stamps `last_seen_at` (at most every 10 s);
   re-joining with an existing nickname reclaims that seat (same player id, new token; team/ready/wins kept, pending
-  kick cleared) from the same device (`device_hash`) or once the seat has been unseen for 45 s, also mid-deal.
+  kick cleared) from the same device (`device_hash`) or once the seat has been unseen for 301 s (`DISCONNECT_MS`), also mid-deal.
   `/state` exposes only a derived `connected` flag ("deconectat" badge). Lobby/finished rooms close after 10 min idle.
 
 ## Testing (GitHub Actions, manual only)
@@ -55,7 +57,7 @@ Start one with `gh workflow run <file> --ref main`, then `gh run watch` (or the 
 | Workflow | Runs |
 | --- | --- |
 | `.github/workflows/check.yml` "Check code" | `npx next typegen` + `npx tsc --noEmit` (typegen first, so route types in `.next/types` are checked), `npx eslint src`, `npx next build`. Every step runs even if an earlier one failed |
-| `.github/workflows/unit-tests.yml` "Unit tests" | `npm test` (Vitest: `src/lib/septica.test.ts`, `kick.test.ts`, `reconnect.test.ts`; pure logic, no DB) |
+| `.github/workflows/unit-tests.yml` "Unit tests" | `npm test` (Vitest: `src/lib/septica.test.ts`, `kick.test.ts`, `reconnect.test.ts`, `server/room.test.ts`; no real DB) |
 | `.github/workflows/e2e.yml` "E2E" | `node scripts/e2e.mjs <base_url>` (input, default production `https://games.hailatat.icu/septica`); one run at a time |
 | `.github/workflows/e2e-ui.yml` "E2E UI (Playwright)" | `npx playwright test` (`playwright.config.ts`, tests in `tests/ui/*.e2e.ts`) against `base_url` (`E2E_BASE_URL`, default production), on desktop Chromium and an emulated iPhone 13 (WebKit). Same concurrency group as "E2E". On failure the report (traces, screenshots, videos) is uploaded as the `playwright-report` artifact |
 
@@ -75,7 +77,7 @@ Start one with `gh workflow run <file> --ref main`, then `gh run watch` (or the 
   (queued spectator promoted), leave mid-deal (cancelled), lobby, 2 vs 2 teams full deal, kicks, host hand-over, last
   one out closes the room, a 2-player room with a pending kick enforced after 10 s. Never calls `/api/feedback`.
 - What E2E UI does (`tests/ui/`, shared steps in `helpers.ts`; every change must reach the other screens within 5 s
-  without a reload, polling is 15 s, so this checks Realtime). The deal is random: each move is picked from the
+  without a reload, polling is 60 s, so this checks Realtime). The deal is random: each move is picked from the
   `/state` JSON of the player on turn (token from their localStorage) and made by clicking that card / "Las mâna":
   - `game.e2e.ts` (both projects): two browser contexts create a room, join by link, ready, deal, play the whole deal
     (each move seen live on the other screen: room version + the card on the felt), end-of-round panel, new round,

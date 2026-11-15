@@ -20,7 +20,7 @@ interface SeatRow {
 
 // POST /api/rooms/[code]/join  { nickname, password?, deviceId? }
 // A nickname that already has a seat in the room reclaims that seat (same player id, new token; team, ready
-// and wins kept) when the request comes from the same device or the seat has been disconnected for 45 s -
+// and wins kept) when the request comes from the same device or the seat has been disconnected for 301 s -
 // in the lobby, mid-deal and after a deal alike.
 export async function POST(req: Request, ctx: RouteContext<"/api/rooms/[code]/join">) {
   return handle(async () => {

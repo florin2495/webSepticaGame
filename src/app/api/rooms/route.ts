@@ -8,7 +8,7 @@ import type { RoomListItem } from "@/lib/types";
 
 // GET /api/rooms - public list of all live rooms (lobby, in-game and finished; idle ones are cleaned up first).
 // Joining a room that is not in the lobby makes you a spectator.
-// Loading the list ("Intră în cameră") first sweeps abandoned rooms: no member seen and no activity for 120 s.
+// Loading the list ("Intră în cameră") first sweeps abandoned rooms: no member seen and no activity for 600 s.
 export async function GET() {
   await connection(); // always request-time, never prerendered at build
   return handle(async () => {

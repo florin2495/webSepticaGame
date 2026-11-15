@@ -44,7 +44,7 @@ create table if not exists public.septica_players (
   wins       integer not null default 0 check (wins >= 0),
   joined_at  timestamptz not null default now(),
   kick_requested_at timestamptz,                           -- pending host kick during a game (null = none), see migrations/001
-  last_seen_at timestamptz not null default now(),         -- presence: disconnected after 45 s, see migrations/002
+  last_seen_at timestamptz not null default now(),         -- presence: disconnected after 301 s, see migrations/002
   device_hash  text,                                       -- sha256 of the browser's device id, see migrations/002
   seat         integer not null default 0,                 -- play order, the host can reorder it, see migrations/003
   role         text not null default 'player',             -- 'player' | 'spectator' (max 16), see migrations/003

@@ -29,7 +29,8 @@ Domeniu: https://septica.hailatat.icu
 - **Joacă pentru el:** dacă cineva nu mai răspunde, host-ul poate juca în locul lui (cea mai mică carte, sau lasă mâna).
 - **Părăsește / Scoate:** dacă pleacă cineva în timpul unei runde, runda se anulează (Șeptica nu poate continua cu
   un loc gol). Dacă pleacă host-ul, devine host următorul jucător. Când pleacă ultimul, camera se închide.
-- **Închidere automată:** o cameră în lobby, sau după rundă, se închide după 10 minute în care nimeni nu o are deschisă.
+- **Închidere automată:** o cameră (în lobby, în joc sau după rundă) se închide după 10 minute în care nimeni nu o are deschisă.
+- **Reconectare:** un jucător nevăzut de 5 minute apare „deconectat” și își poate relua locul de pe alt dispozitiv.
 - **Confirmare la jucarea cărții:** opțională, din Setări.
 
 ## Arhitectură, pe scurt
@@ -40,7 +41,7 @@ Domeniu: https://septica.hailatat.icu
   o vedere filtrată: mâna lui și câte cărți au ceilalți. Fiecare mutare verifică `version` (concurență optimistă).
 - Tabelele au **RLS activat și nicio policy**, plus `revoke` pentru `anon`/`authenticated`.
 - Live: după fiecare modificare, serverul trimite un semnal **Supabase Realtime Broadcast** pe `room:<uuid>`,
-  fără date de joc; clientul face refetch la `/api/rooms/<cod>/state`. Polling la 15 s, ca rezervă.
+  fără date de joc; clientul face refetch la `/api/rooms/<cod>/state`. Polling la 60 s, ca rezervă.
 
 ## Setup
 
@@ -55,4 +56,4 @@ Domeniu: https://septica.hailatat.icu
 ## Limitări cunoscute
 
 - Identitatea jucătorului e un token în `localStorage`; dacă îl ștergi, nu mai poți reintra în runda curentă.
-- Nu există rate limiting. Maxim 4 jucători pe cameră, fără spectatori.
+- Nu există rate limiting. Maxim 4 jucători pe cameră; ceilalți intră ca spectatori.

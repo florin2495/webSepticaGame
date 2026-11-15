@@ -7,7 +7,6 @@ import {
   isRoomExpired,
   isTestRoom,
   legalCards,
-  minutesLabel,
   ROOM_ABANDONED_MS,
   ROOM_IDLE_MINUTES,
   RuleError,
@@ -25,7 +24,7 @@ import { enforceExpiredKicks } from "./membership";
 import { kickRemainingMs } from "@/lib/kick";
 import { isConnected, LAST_SEEN_TOUCH_MS } from "@/lib/reconnect";
 
-const GONE = `Camera nu există sau a fost închisă după ${minutesLabel(ROOM_IDLE_MINUTES)} de inactivitate.`;
+const GONE = "Camera nu mai există (a fost închisă după inactivitate).";
 
 export function normalizeCode(code: string): string {
   const c = decodeURIComponent(code).trim().toUpperCase();

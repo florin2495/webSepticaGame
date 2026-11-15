@@ -1,5 +1,5 @@
 // Scenario 1: two real browsers play a live deal on the deployed site: create, join by link, ready, deal, every
-// move (card or "Las mâna") reaches the other screen through Realtime (well under the 15 s polling fallback), the
+// move (card or "Las mâna") reaches the other screen through Realtime (well under the 60 s polling fallback), the
 // end-of-round panel, a new round followed live, leave mid-round (round cancelled), leave. Runs on every project.
 import { expect, test } from "@playwright/test";
 import { createRoom, joinRoom, leaveAll, playDeal, readyAndStart, REALTIME_MS, resultHeadline, withPlayers } from "./helpers";

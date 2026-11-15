@@ -22,7 +22,7 @@ export function useKickSeconds(remainingMs: number | null): number | null {
   return Math.ceil(Math.max(0, remainingMs - Math.max(0, now - receivedAt)) / 1000);
 }
 
-/** Shown next to a player not seen for 45 s (phone in the background, closed tab, no network). */
+/** Shown next to a player not seen for 301 s (phone in the background, closed tab, no network). */
 export function OfflineBadge({ connected }: { connected: boolean | undefined }) {
   if (connected !== false) return null;
   return (
