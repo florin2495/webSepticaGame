@@ -69,12 +69,13 @@ const roomName = (tag) => `e2e-test-${tag}-${Date.now().toString(36)}`.slice(0, 
 
 // Minimal copy of the rules, to check the server's trick winner and scoring.
 const rankOf = (c) => c.slice(0, -1);
-const cuts = (c, lead) => rankOf(c) === lead || rankOf(c) === "7";
+// With 3 players the two 8s left in the deck cut like 7.
+const cuts = (c, lead, n) => rankOf(c) === lead || rankOf(c) === "7" || (n === 3 && rankOf(c) === "8");
 const points = (cards) => cards.filter((c) => rankOf(c) === "10" || rankOf(c) === "A").length;
-function holder(plays) {
+function holder(plays, n) {
   const lead = rankOf(plays[0].card);
   let h = plays[0].playerId;
-  for (const p of plays.slice(1)) if (cuts(p.card, lead)) h = p.playerId;
+  for (const p of plays.slice(1)) if (cuts(p.card, lead, n)) h = p.playerId;
   return h;
 }
 
@@ -148,7 +149,7 @@ async function playDeal(code, players, deckSize, { invalidChecks = false } = {})
       res = await call(`/api/rooms/${code}/let-go`, { token: p.token, body: {} });
     } else {
       const card = mine.legal[Math.floor(Math.random() * mine.legal.length)];
-      if (mine.phase === "decide" && !cuts(card, rankOf(mine.trick[0].card))) trickOk = false;
+      if (mine.phase === "decide" && !cuts(card, rankOf(mine.trick[0].card), players.length)) trickOk = false;
       res = await call(`/api/rooms/${code}/play`, { token: p.token, body: { card } });
     }
     if (res.status !== 200) {
@@ -160,7 +161,7 @@ async function playDeal(code, players, deckSize, { invalidChecks = false } = {})
     const ng = all[players[0].playerId].game;
     if (ng.tricksPlayed !== lastTrickCount && ng.lastTrick) {
       lastTrickCount = ng.tricksPlayed;
-      if (ng.lastTrick.winner !== holder(ng.lastTrick.plays)) trickOk = false;
+      if (ng.lastTrick.winner !== holder(ng.lastTrick.plays, players.length)) trickOk = false;
       if (ng.lastTrick.points !== points(ng.lastTrick.plays.map((x) => x.card))) trickOk = false;
       if (all[players[0].playerId].room.status === "playing" && ng.leader !== ng.lastTrick.winner) trickOk = false;
     }

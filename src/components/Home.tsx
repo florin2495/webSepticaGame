@@ -240,15 +240,15 @@ export function Rules() {
     <details className="text-sm text-zinc-600 dark:text-zinc-400">
       <summary className="cursor-pointer font-semibold">Reguli</summary>
       <ol className="mt-2 list-decimal space-y-1 pl-5">
-        <li>Pachet de 32 de cărți (7–A). În 3 jucători se scot doi de 8, rămân 30.</li>
+        <li>Pachet de 32 de cărți (7–A). În 3 jucători se scot doi de 8, rămân 30, iar cei doi de 8 rămași taie ca 7.</li>
         <li>Fiecare are mereu 4 cărți în mână. Nu ești obligat să răspunzi la culoare sau la valoare.</li>
         <li>
           Cine începe mâna pune o carte. Pe rând, fiecare pune câte una. <b>Taie</b> cartea de aceeași valoare cu prima, sau
-          orice <b>7</b>.
+          orice <b>7</b> (în 3 jucători și orice <b>8</b>).
         </li>
         <li>
           După ce a pus toată lumea, dacă ai început și ai fost tăiat, poți <b>continua</b> cu o carte de aceeași valoare
-          sau un 7 (și toată lumea mai pune o carte), sau <b>lași mâna</b>.
+          sau un 7 (în 3 și un 8) (și toată lumea mai pune o carte), sau <b>lași mâna</b>.
         </li>
         <li>Mâna o ia ultimul care a tăiat (sau cel care a început, dacă nu a tăiat nimeni). El trage primul din pachet și începe mâna următoare.</li>
         <li>Fiecare 10 și fiecare As valorează 1 punct (8 în total). Câștigă cine are cele mai multe puncte; 4–4 e egal.</li>

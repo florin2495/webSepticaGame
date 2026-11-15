@@ -3,6 +3,8 @@ import {
   autoMove,
   buildDeck,
   canLetGo,
+  cutHint,
+  cuts,
   type Deal,
   isDealOver,
   isRoomAbandoned,
@@ -21,6 +23,7 @@ import {
   sides,
   teamProblem,
   trickHolder,
+  wildRanks,
   winningSides,
 } from "./septica";
 
@@ -89,9 +92,47 @@ describe("tricks", () => {
   });
 
   it("same rank or a 7 cuts; the last cutter holds the trick", () => {
-    expect(trickHolder([{ playerId: "a", card: "9H" }, { playerId: "b", card: "9S" }, { playerId: "c", card: "KD" }])).toBe("b");
-    expect(trickHolder([{ playerId: "a", card: "9H" }, { playerId: "b", card: "9S" }, { playerId: "c", card: "7D" }])).toBe("c");
-    expect(trickHolder([{ playerId: "a", card: "AH" }, { playerId: "b", card: "10S" }])).toBe("a");
+    expect(trickHolder([{ playerId: "a", card: "9H" }, { playerId: "b", card: "9S" }, { playerId: "c", card: "KD" }], 3)).toBe("b");
+    expect(trickHolder([{ playerId: "a", card: "9H" }, { playerId: "b", card: "9S" }, { playerId: "c", card: "7D" }], 3)).toBe("c");
+    expect(trickHolder([{ playerId: "a", card: "AH" }, { playerId: "b", card: "10S" }], 2)).toBe("a");
+  });
+
+  it("8 cuts like 7 only with 3 players", () => {
+    expect(wildRanks(2)).toEqual(["7"]);
+    expect(wildRanks(3)).toEqual(["7", "8"]);
+    expect(wildRanks(4)).toEqual(["7"]);
+    expect(cuts("8S", "A", 3)).toBe(true);
+    expect(cuts("8S", "A", 2)).toBe(false);
+    expect(cuts("8S", "A", 4)).toBe(false);
+    expect(cuts("8S", "8", 4)).toBe(true);
+    const plays = [
+      { playerId: "a", card: "AH" },
+      { playerId: "b", card: "8S" },
+      { playerId: "c", card: "KD" },
+    ];
+    expect(trickHolder(plays, 3)).toBe("b");
+    expect(trickHolder(plays.slice(0, 2), 2)).toBe("a");
+    expect(cutHint("9", 3)).toBe("9, 7 sau 8");
+    expect(cutHint("8", 3)).toBe("8 sau 7");
+    expect(cutHint("9", 2)).toBe("9 sau 7");
+  });
+
+  it("with 3 players an 8 wins the trick and lets the leader continue", () => {
+    let d = fixed({ a: ["AH", "8H"], b: ["8S", "9C"], c: ["KD", "QD"] });
+    d = playCard(d, "a", "AH");
+    d = playCard(d, "b", "8S");
+    d = playCard(d, "c", "KD");
+    expect(d.phase).toBe("decide");
+    expect(legalCards(d, "a")).toEqual(["8H"]);
+    const gone = letGo(d, "a");
+    expect(gone.lastTrick?.winner).toBe("b");
+  });
+
+  it("autoMove keeps a wild 8 with 3 players", () => {
+    const d3 = fixed({ a: ["8S", "KH"], b: ["9C"], c: ["QD"] });
+    expect(autoMove(d3, "a").trick[0].card).toBe("KH");
+    const d2 = fixed({ a: ["8S", "KH"], b: ["9C"] });
+    expect(autoMove(d2, "a").trick[0].card).toBe("8S");
   });
 
   it("a cut leader may continue with a cutting card, or let go", () => {

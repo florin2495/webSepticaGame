@@ -4,6 +4,7 @@
 //  - 32 cards (7, 8, 9, 10, J, Q, K, A in 4 suits). With 3 players two 8s are removed (30 cards).
 //  - Everyone holds 4 cards. The trick leader plays any card; then everyone, in seat order, plays any card.
 //  - A card "cuts" (taie) when it has the same rank as the first card of the trick, or is a 7 (wild).
+//    With 3 players the two 8s left in the deck are wild too.
 //  - After every full round of the trick, if someone else holds the trick, the leader may continue with
 //    another cutting card (then everyone plays again) or let it go. The last cutter takes all the cards.
 //    If nobody cut, the leader takes them.
@@ -128,16 +129,21 @@ export interface Deal {
 
 export class RuleError extends Error {}
 
-export function cuts(card: Card, leadRank: Rank): boolean {
-  return rankOf(card) === leadRank || rankOf(card) === "7";
+/** Ranks that cut any card: always 7; with 3 players also 8 (the two 8s left in the 30-card deck). */
+export function wildRanks(players: number): Rank[] {
+  return players === 3 ? ["7", "8"] : ["7"];
+}
+
+export function cuts(card: Card, leadRank: Rank, players: number): boolean {
+  return rankOf(card) === leadRank || wildRanks(players).includes(rankOf(card));
 }
 
 /** Who currently holds the trick: the last player who cut, or the leader if nobody did. */
-export function trickHolder(trick: Play[]): string | null {
+export function trickHolder(trick: Play[], players: number): string | null {
   if (trick.length === 0) return null;
   const lead = rankOf(trick[0].card);
   let holder = trick[0].playerId;
-  for (const p of trick.slice(1)) if (cuts(p.card, lead)) holder = p.playerId;
+  for (const p of trick.slice(1)) if (cuts(p.card, lead, players)) holder = p.playerId;
   return holder;
 }
 
@@ -195,7 +201,7 @@ export function legalCards(deal: Deal, playerId: string): Card[] {
   const hand = deal.hands[playerId] ?? [];
   if (deal.phase === "decide") {
     const lead = rankOf(deal.trick[0].card);
-    return hand.filter((c) => cuts(c, lead));
+    return hand.filter((c) => cuts(c, lead, deal.order.length));
   }
   return [...hand];
 }
@@ -220,7 +226,7 @@ export function playCard(input: Deal, playerId: string, card: Card): Deal {
   if (!legalCards(input, playerId).includes(card)) {
     throw new RuleError(
       input.phase === "decide"
-        ? `Poți continua doar cu ${rankLabel(rankOf(input.trick[0].card))} sau cu 7.`
+        ? `Poți continua doar cu ${cutHint(rankOf(input.trick[0].card), input.order.length)}.`
         : "Nu ai cartea asta.",
     );
   }
@@ -235,9 +241,9 @@ export function playCard(input: Deal, playerId: string, card: Card): Deal {
     return deal;
   }
   // A full round of the trick is down.
-  const holder = trickHolder(deal.trick)!;
+  const holder = trickHolder(deal.trick, n)!;
   const lead = rankOf(deal.trick[0].card);
-  if (holder !== deal.leader && deal.hands[deal.leader].some((c) => cuts(c, lead))) {
+  if (holder !== deal.leader && deal.hands[deal.leader].some((c) => cuts(c, lead, n))) {
     deal.phase = "decide";
     deal.turn = deal.leader;
     return deal;
@@ -252,7 +258,7 @@ export function letGo(input: Deal, playerId: string): Deal {
 }
 
 function resolveTrick(deal: Deal): Deal {
-  const winner = trickHolder(deal.trick)!;
+  const winner = trickHolder(deal.trick, deal.order.length)!;
   const cards = deal.trick.map((p) => p.card);
   deal.captured[winner].push(...cards);
   deal.lastTrick = { plays: deal.trick, winner, points: pointsOf(cards) };
@@ -267,13 +273,15 @@ function resolveTrick(deal: Deal): Deal {
 
 /**
  * A move made for a player who does not respond (host's "joacă pentru el"):
- * lets the trick go when deciding, otherwise plays the least valuable card (no 10/A, no 7 if possible).
+ * lets the trick go when deciding, otherwise plays the least valuable card (no 10/A, no wild 7/8 if possible).
  */
 export function autoMove(deal: Deal, playerId: string): Deal {
   if (canLetGo(deal, playerId)) return letGo(deal, playerId);
   const legal = legalCards(deal, playerId);
   if (legal.length === 0) throw new RuleError("Nu e rândul lui.");
-  const order = ["8", "9", "J", "Q", "K", "7", "10", "A"];
+  // Wild cards (7, and 8 with 3 players) are kept: they go right before the point cards.
+  const wild = wildRanks(deal.order.length);
+  const order = [...["8", "9", "J", "Q", "K"].filter((r) => !wild.includes(r as Rank)), ...wild, "10", "A"];
   const best = [...legal].sort((a, b) => order.indexOf(rankOf(a)) - order.indexOf(rankOf(b)))[0];
   return playCard(deal, playerId, best);
 }
@@ -375,5 +383,11 @@ const RANK_NAMES: Record<Rank, string> = {
   A: "As",
 };
 export const rankLabel = (r: Rank) => RANK_NAMES[r];
+
+/** "9, 7 sau 8" - what cuts a trick led with `leadRank` (ranks listed once, wild ones last). */
+export function cutHint(leadRank: Rank, players: number): string {
+  const ranks = [leadRank, ...wildRanks(players).filter((r) => r !== leadRank)].map(rankLabel);
+  return ranks.length === 1 ? ranks[0] : `${ranks.slice(0, -1).join(", ")} sau ${ranks[ranks.length - 1]}`;
+}
 export const SUIT_SYMBOL: Record<Suit, string> = { S: "♠", H: "♥", D: "♦", C: "♣" };
 export const isRed = (card: Card) => suitOf(card) === "H" || suitOf(card) === "D";

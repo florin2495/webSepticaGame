@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { PREF_CONFIRM_PLAY, useBoolPref } from "@/lib/client/prefs";
-import { type Card as CardT, cuts, movedOrder, type Play, rankLabel, rankOf } from "@/lib/septica";
+import { type Card as CardT, cutHint, cuts, movedOrder, type Play, rankLabel, rankOf, wildRanks } from "@/lib/septica";
 import type { GameView, PublicPlayer, RoomState, SideView } from "@/lib/types";
 import { KickBadge, OfflineBadge } from "./KickBadge";
 import { CardBack, PlayingCard } from "./PlayingCard";
@@ -10,12 +10,12 @@ import { Button, Card, ErrorText } from "./ui";
 import { TEAM_NAMES, TEAM_STYLES, useAction } from "./useAction";
 
 /** Index (in the trick) of the card currently holding it. */
-function holderIndex(trick: Play[]): number {
+function holderIndex(trick: Play[], players: number): number {
   if (trick.length === 0) return -1;
   const lead = rankOf(trick[0].card);
   let idx = 0;
   trick.forEach((p, i) => {
-    if (i > 0 && cuts(p.card, lead)) idx = i;
+    if (i > 0 && cuts(p.card, lead, players)) idx = i;
   });
   return idx;
 }
@@ -221,7 +221,13 @@ export function Game({
 
         {leadRank && (
           <p className="text-center text-xs text-zinc-500">
-            Taie: <b>{rankLabel(leadRank)}</b> sau <b>7</b>
+            Taie:{" "}
+            {[leadRank, ...wildRanks(game.order.length).filter((r) => r !== leadRank)].map((r, i, all) => (
+              <span key={r}>
+                {i > 0 && (i === all.length - 1 ? " sau " : ", ")}
+                <b>{rankLabel(r)}</b>
+              </span>
+            ))}
           </p>
         )}
         <p
@@ -250,11 +256,11 @@ export function Game({
 
 function statusText(game: GameView, meId: string, nick: (id: string | null) => string, finished: boolean): string {
   if (finished) return "Runda s-a terminat.";
-  const lead = game.trick[0] ? rankLabel(rankOf(game.trick[0].card)) : null;
+  const lead = game.trick[0] ? cutHint(rankOf(game.trick[0].card), game.order.length) : null;
   if (game.turn === meId) {
-    if (game.phase === "decide") return `Te-a tăiat ${nick(game.holder)}. Continui cu ${lead} sau 7, ori lași mâna.`;
+    if (game.phase === "decide") return `Te-a tăiat ${nick(game.holder)}. Continui cu ${lead}, ori lași mâna.`;
     if (game.trick.length === 0) return "Începi tu mâna: pune orice carte.";
-    return `E rândul tău. Taie cu ${lead} sau 7, ori pune altă carte.`;
+    return `E rândul tău. Taie cu ${lead}, ori pune altă carte.`;
   }
   if (game.phase === "decide") return `${nick(game.turn)} decide dacă mai continuă mâna…`;
   if (game.trick.length === 0) return `${nick(game.turn)} începe mâna…`;
@@ -279,7 +285,7 @@ function TrickTable({
   const live = pending && !game.trick.some((p) => p.card === pending.card) ? [...game.trick, pending] : game.trick;
   const showingLast = live.length === 0 && game.lastTrick !== null;
   const plays = showingLast ? game.lastTrick!.plays : live;
-  const hi = holderIndex(plays);
+  const hi = holderIndex(plays, game.order.length);
   const spot = (id: string): [number, number] => {
     const k = (game.order.indexOf(id) - anchorIdx + seatCount) % seatCount;
     return FELT_SPOT[seatPos(k, seatCount)];

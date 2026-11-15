@@ -6,12 +6,13 @@ Domeniu: https://septica.hailatat.icu
 
 ## Reguli
 
-1. Pachet de 32 de cărți (7, 8, 9, 10, J, Q, K, A). În 3 jucători se scot 8♣ și 8♦ (rămân 30).
+1. Pachet de 32 de cărți (7, 8, 9, 10, J, Q, K, A). În 3 jucători se scot 8♣ și 8♦ (rămân 30),
+   iar 8♠ și 8♥ taie ca 7.
 2. Fiecare are mereu 4 cărți. Nu ești obligat să răspunzi la culoare sau valoare: pui orice carte.
 3. Cine începe mâna pune o carte. Pe rând, fiecare pune câte una. **Taie** o carte de aceeași valoare cu prima
-   sau orice **7**.
+   sau orice **7** (în 3 jucători și orice **8**).
 4. După ce a pus toată lumea, dacă cel care a început a fost tăiat, poate **continua** cu o carte de aceeași valoare
-   sau un 7 (și toată lumea mai pune câte o carte) sau poate **lăsa mâna**. Dacă nu are cu ce să continue,
+   sau un 7 (în 3 jucători și un 8) (și toată lumea mai pune câte o carte) sau poate **lăsa mâna**. Dacă nu are cu ce să continue,
    mâna se încheie singură.
 5. Mâna o ia ultimul care a tăiat (sau cel care a început, dacă nu a tăiat nimeni). El trage primul din pachet,
    apoi ceilalți în ordine, până ajung toți la 4 cărți, și tot el începe mâna următoare.

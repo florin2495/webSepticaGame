@@ -263,7 +263,7 @@ function gameView(deal: Deal, meId: string, finished: boolean): GameView {
     turn: finished ? null : deal.turn,
     phase: deal.phase,
     trick: deal.trick,
-    holder: trickHolder(deal.trick),
+    holder: trickHolder(deal.trick, deal.order.length),
     hand: deal.hands[meId] ?? [],
     legal: finished || !deal.order.includes(meId) ? [] : legalCards(deal, meId),
     canLetGo: !finished && deal.order.includes(meId) && canLetGo(deal, meId),
